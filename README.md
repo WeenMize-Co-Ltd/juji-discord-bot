@@ -46,6 +46,35 @@ A Discord bot built with [discord.js](https://discord.js.org) v14, running on th
 
 > Re-run `bun run deploy` whenever you change a command's name, description, or options.
 
+## Deployment (Docker)
+
+The repo ships a multi-stage [Dockerfile](Dockerfile) (based on Bun's official image) and a [docker-compose.yml](docker-compose.yml) for running on a Linux server.
+
+1. Create a `.env` file next to `docker-compose.yml` with your credentials:
+
+   ```sh
+   DISCORD_TOKEN=your-bot-token
+   DISCORD_CLIENT_ID=your-application-client-id
+   ```
+
+2. Build and start the bot in the background:
+
+   ```sh
+   docker compose up -d --build
+   ```
+
+3. Follow the logs and confirm the bot is online:
+
+   ```sh
+   docker compose logs -f
+   ```
+
+   You should see `Successfully reloaded ... application (/) commands.` followed by `Ready! Logged in as <tag>`.
+
+To stop: `docker compose down`.
+
+> The container runs `bun run deploy && bun run start` on startup, so slash commands are re-registered with Discord automatically on every launch. The service uses `restart: unless-stopped`, so it survives crashes and server reboots.
+
 ## Project structure
 
 ```

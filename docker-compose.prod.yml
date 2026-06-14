@@ -1,0 +1,7 @@
+services:
+  juji-discord-bot:
+    image: ${IMAGE}
+    restart: unless-stopped
+    env_file:
+      - .env
+    pull_policy: always

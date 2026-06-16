@@ -155,3 +155,29 @@ jobs:
           docker image prune -f
           docker logout ghcr.io
           EOF
+
+  notify:
+    needs: [release, deploy]
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord release notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERSION: ${{ needs.release.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          curl -fsSL -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"Juji v${VERSION} deployed\",
+                \"url\": \"https://github.com/${REPO}/releases/tag/v${VERSION}\",
+                \"color\": 5763719,
+                \"fields\": [
+                  { \"name\": \"Version\", \"value\": \"v${VERSION}\", \"inline\": true },
+                  { \"name\": \"Release notes\", \"value\": \"[View on GitHub](https://github.com/${REPO}/releases/tag/v${VERSION})\", \"inline\": true }
+                ],
+                \"footer\": { \"text\": \"semantic-release\" }
+              }]
+            }"

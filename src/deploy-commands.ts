@@ -1,16 +1,18 @@
 import { REST, Routes } from 'discord.js'
-import type { Command } from './types/command'
+import { Command } from './types/command'
 import { clientId, token } from './config'
 
 const commands: unknown[] = []
 
 const glob = new Bun.Glob('*.ts')
 for await (const file of glob.scan(`${import.meta.dir}/commands`)) {
-  const command = ((await import(`./commands/${file}`)) as { default: Command }).default
-  if ('data' in command && 'execute' in command) {
+  const CommandClass = ((await import(`./commands/${file}`)) as { default: new () => Command })
+    .default
+  const command = new CommandClass()
+  if (command instanceof Command) {
     commands.push(command.data.toJSON())
   } else {
-    console.warn(`[WARNING] The command at ./commands/${file} is missing "data" or "execute".`)
+    console.warn(`[WARNING] The command at ./commands/${file} does not extend Command.`)
   }
 }
 

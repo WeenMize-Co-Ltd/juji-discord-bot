@@ -1,14 +1,14 @@
 import {
   SlashCommandBuilder,
-  ChatInputCommandInteraction,
   Collection,
+  type ChatInputCommandInteraction,
   type SlashCommandOptionsOnlyBuilder,
 } from 'discord.js'
 
-export interface Command {
-  data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder
+export abstract class Command {
+  abstract data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder
   cooldown?: number
-  execute: (interaction: ChatInputCommandInteraction) => Promise<void>
+  abstract execute(interaction: ChatInputCommandInteraction): Promise<void>
 }
 
 declare module 'discord.js' {

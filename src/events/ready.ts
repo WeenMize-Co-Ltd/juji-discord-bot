@@ -1,10 +1,11 @@
-import { Events } from 'discord.js'
-import type { Event } from '../types/event'
+import { Events, type Client } from 'discord.js'
+import { Event } from '../types/event'
 
-export default {
-  name: Events.ClientReady,
-  once: true,
-  execute(client) {
+export default class Ready extends Event<typeof Events.ClientReady> {
+  name = Events.ClientReady as const
+  override once = true
+
+  execute(client: Client<true>): void {
     console.log(`Ready! Logged in as ${client.user.tag}`)
-  },
-} satisfies Event<typeof Events.ClientReady>
+  }
+}

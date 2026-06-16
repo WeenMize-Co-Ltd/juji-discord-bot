@@ -1,10 +1,18 @@
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags, Colors } from 'discord.js'
-import type { Command } from '../types/command'
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  MessageFlags,
+  Colors,
+  type ChatInputCommandInteraction,
+} from 'discord.js'
+import { Command } from '../types/command'
 
-const help: Command = {
-  data: new SlashCommandBuilder().setName('help').setDescription('List all available commands.'),
-  cooldown: 5,
-  async execute(interaction) {
+export default class Help extends Command {
+  data = new SlashCommandBuilder().setName('help').setDescription('List all available commands.')
+
+  override cooldown = 5
+
+  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const commands = [...interaction.client.commands.values()].sort((a, b) =>
       a.data.name.localeCompare(b.data.name),
     )
@@ -23,7 +31,5 @@ const help: Command = {
       .setTimestamp()
 
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral })
-  },
+  }
 }
-
-export default help

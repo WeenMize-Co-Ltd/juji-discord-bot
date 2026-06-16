@@ -1,12 +1,20 @@
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags, Colors } from 'discord.js'
-import type { Command } from '../types/command'
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  MessageFlags,
+  Colors,
+  type ChatInputCommandInteraction,
+} from 'discord.js'
+import { Command } from '../types/command'
 
-const ping: Command = {
-  data: new SlashCommandBuilder()
+export default class Ping extends Command {
+  data = new SlashCommandBuilder()
     .setName('ping')
-    .setDescription("Check the bot's latency to Discord."),
-  cooldown: 5,
-  async execute(interaction) {
+    .setDescription("Check the bot's latency to Discord.")
+
+  override cooldown = 5
+
+  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const before = Date.now()
     await interaction.deferReply({ flags: MessageFlags.Ephemeral })
     const apiLatency = Date.now() - before
@@ -29,7 +37,5 @@ const ping: Command = {
       .setTimestamp()
 
     await interaction.editReply({ embeds: [embed] })
-  },
+  }
 }
-
-export default ping

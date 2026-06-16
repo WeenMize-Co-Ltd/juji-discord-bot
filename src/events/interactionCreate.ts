@@ -1,11 +1,12 @@
-import { Collection, Events, MessageFlags } from 'discord.js'
-import type { Event } from '../types/event'
+import { Collection, Events, MessageFlags, type Interaction } from 'discord.js'
+import { Event } from '../types/event'
 
 const DEFAULT_COOLDOWN = 3
 
-export default {
-  name: Events.InteractionCreate,
-  async execute(interaction) {
+export default class InteractionCreate extends Event<typeof Events.InteractionCreate> {
+  name = Events.InteractionCreate as const
+
+  async execute(interaction: Interaction): Promise<void> {
     if (!interaction.isChatInputCommand()) return
 
     const command = interaction.client.commands.get(interaction.commandName)
@@ -41,12 +42,15 @@ export default {
       await command.execute(interaction)
     } catch (error) {
       console.error(error)
-      const reply = { content: 'There was an error executing this command!', ephemeral: true }
+      const reply = {
+        content: 'There was an error executing this command!',
+        flags: MessageFlags.Ephemeral,
+      } as const
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(reply)
       } else {
         await interaction.reply(reply)
       }
     }
-  },
-} satisfies Event<typeof Events.InteractionCreate>
+  }
+}

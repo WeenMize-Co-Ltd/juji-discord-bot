@@ -5,3 +5,4 @@ export function requireEnv(key: string): string {
 }
 
 export * from './discord'
+export * from './music'

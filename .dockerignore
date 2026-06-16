@@ -5,3 +5,7 @@ docker-compose*
 .env
 .gitignore
 *.md
+BotDiscord-jujibot-main
+music_cache
+secrets
+cookies.txt

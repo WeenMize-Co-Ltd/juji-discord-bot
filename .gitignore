@@ -114,3 +114,12 @@ dist
 
 
 config.json
+
+# Downloaded music cache
+music_cache/
+
+# yt-dlp cookies (secret — never commit)
+cookies.txt
+secrets/
+
+BotDiscord-jujibot-main/

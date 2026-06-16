@@ -1,8 +1,12 @@
 {
   "name": "juji-discord-bot",
+  "version": "0.0.0-semantically-released",
   "module": "index.ts",
   "dependencies": {
-    "discord.js": "^14.26.4"
+    "@discordjs/voice": "^0.19.2",
+    "discord.js": "^14.26.4",
+    "ffmpeg-static": "^5.3.0",
+    "libsodium-wrappers": "^0.8.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

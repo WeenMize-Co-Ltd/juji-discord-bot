@@ -4,3 +4,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - YTDLP_COOKIES_FILE=/usr/src/app/secrets/cookies.txt
+    volumes:
+      - music_cache:/usr/src/app/music_cache
+      - ./secrets:/usr/src/app/secrets:ro
+
+volumes:
+  music_cache:

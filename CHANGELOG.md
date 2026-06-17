@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/compare/v1.2.0...v1.2.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* use deno instead of node for yt-dlp signature solving ([624bfc5](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/commit/624bfc53e37c4f9721d42748d28705024b9a6d29))
+
 # [1.2.0](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/compare/v1.1.0...v1.2.0) (2026-06-17)
 
 

@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/compare/v1.3.1...v1.3.2) (2026-06-19)
+
+
+### Bug Fixes
+
+* update system prompt ([5bbe646](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/commit/5bbe646b113fb3537e73435ed56a5128c52313ad))
+
 ## [1.3.1](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/compare/v1.3.0...v1.3.1) (2026-06-18)
 
 

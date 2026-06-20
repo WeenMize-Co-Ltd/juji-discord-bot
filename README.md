@@ -23,6 +23,21 @@ The music player joins the voice channel you're in, fetches audio with [yt-dlp](
 - It stays on-topic (chat + music); off-topic, unsafe, or instruction-override requests get a polite decline.
 - LLM requests are processed **one at a time** across the whole bot (a global queue), so a small CPU-only model stays within budget.
 
+## HTTP API
+
+The bot also runs a small [Hono](https://hono.dev) HTTP server in the **same process** (it's another adapter over the same domain logic, alongside the Discord one). It's the entry point for a future web music control panel.
+
+- Listens on `API_PORT` (default `3000`); `GET /health` returns `{ "status": "ok", "uptime": <seconds>, "timestamp": "..." }`.
+- Cross-origin requests are allowed per `API_CORS_ORIGINS` (default `*`; set a comma-separated allowlist for the panel's origin). Only needed if a browser calls the API cross-origin — a same-stack frontend/proxy that calls it server-side doesn't need CORS.
+
+In local (non-Docker) dev the server is on `localhost`:
+
+```sh
+curl http://localhost:3000/health
+```
+
+Under Docker Compose it's **internal to the Compose network** (not published to the host) — see [Deployment](#deployment-docker).
+
 ## Prerequisites
 
 - [Bun](https://bun.com) installed
@@ -47,6 +62,10 @@ The music player joins the voice channel you're in, fetches audio with [yt-dlp](
    ```sh
    DISCORD_TOKEN=your-bot-token
    DISCORD_CLIENT_ID=your-application-client-id
+
+   # Optional (HTTP API):
+   # API_PORT=3000                          # port the Hono server listens on (default: 3000)
+   # API_CORS_ORIGINS=*                     # comma-separated CORS allowlist, or * for any (default: *)
 
    # Optional (music player):
    # MUSIC_CACHE_DIR=./music_cache          # where downloaded audio is cached (default: ./music_cache)
@@ -119,6 +138,8 @@ To stop: `docker compose down`.
 
 > The container runs `bun run deploy && bun run start` on startup, so slash commands are re-registered with Discord automatically on every launch. The service uses `restart: unless-stopped`, so it survives crashes and server reboots. Downloaded audio is cached in the `music_cache` named volume so it persists across restarts.
 
+The HTTP API is **not published to the host** — it's reachable only on the Compose network, so a frontend/proxy added to the same stack calls it at `http://juji-discord-bot:${API_PORT:-3000}`. To hit it from the host for debugging, either add a `ports:` mapping to the service or `docker compose exec juji-discord-bot curl http://localhost:3000/health`.
+
 The Compose stack also starts an [Ollama](https://ollama.com) service for the chat assistant (the bot reaches it at `http://ollama:11434` over the Compose network — no extra env needed). On first boot the bot **auto-pulls** the configured model (`gemma4:e2b` by default); this can take a while, so watch for `[llm] model … pulled` in the logs. The model is loaded into memory **lazily on the first chat message** (not at pull time), so `ollama ps` stays empty until someone @mentions the bot. To pull manually: `docker compose exec ollama ollama pull gemma4:e2b`. Models persist in the `ollama_models` volume.
 
 The `ollama` service env keeps inference cheap and bounded on a CPU host: `OLLAMA_NUM_PARALLEL=1` + `OLLAMA_MAX_LOADED_MODELS=1` process one prompt at a time, and `OLLAMA_CONTEXT_LENGTH=4096` caps the context — a large context makes Ollama allocate a KV cache big enough to OOM-kill the model runner on load (`llama runner process has terminated: signal: killed`). The bot also sends `num_ctx` per request, so it's capped from both sides.
@@ -127,18 +148,19 @@ The `ollama` service env keeps inference cheap and bounded on a CPU host: `OLLAM
 
 ```
 src/
-├── index.ts              # Composition root — starts each subsystem (startBot)
+├── index.ts              # Composition root — starts each subsystem (startApi, startBot)
 ├── bot.ts                # Builds the client, loads commands & events, logs in
 ├── deploy-commands.ts    # Registers slash commands with Discord
 ├── commands/             # Slash commands (one class file each)
 ├── events/               # Gateway event handlers (one class file each)
+├── api/                  # HTTP adapter (Hono) — startApi + routes/ (one Hono sub-app per resource)
 ├── music/                # Music domain — MusicManager, GuildPlayer, MusicService, yt-dlp service
 ├── llm/                  # Chat domain — OllamaClient, SerialQueue, Assistant
 ├── config/               # Env var loading & validation
 └── types/                # Shared TypeScript types & Client augmentation
 ```
 
-The app is a **modular monolith**: framework-agnostic domain logic (e.g. [src/music/](src/music/)) lives in its own module, and thin adapters (`src/commands/` + `src/events/` for Discord) drive it. `index.ts` is the composition root that starts each subsystem; `bot.ts` builds the discord.js client and dynamically loads the commands and events.
+The app is a **modular monolith**: framework-agnostic domain logic (e.g. [src/music/](src/music/)) lives in its own module, and thin adapters drive it — `src/commands/` + `src/events/` for Discord, and `src/api/` (Hono) for HTTP. `index.ts` is the composition root that starts each subsystem; `bot.ts` builds the discord.js client and dynamically loads the commands and events, while `api/index.ts` (`startApi`) builds the Hono app and mounts the route modules.
 
 ### Adding a command
 
@@ -180,3 +202,27 @@ export default class GuildCreate extends Event<typeof Events.GuildCreate> {
 ```
 
 The `GatewayIntentBits.Guilds` and `GuildVoiceStates` intents are enabled by default. Events relying on other intents (e.g. message content or members) also require adding the intent in `src/bot.ts`.
+
+### Adding an API route
+
+Create a file in `src/api/routes/` that exports a **Hono sub-app** for one resource:
+
+```ts
+import { Hono } from 'hono'
+
+export const ping = new Hono().get('/', (c) => c.text('pong'))
+```
+
+Then mount it in [src/api/index.ts](src/api/index.ts) with `.route()`:
+
+```ts
+import { ping } from './routes/ping'
+
+const app = new Hono()
+  .use(logger())
+  .use('*', cors({ origin: corsOrigins }))
+  .route('/health', health)
+  .route('/ping', ping) // -> GET /ping
+```
+
+Logging and CORS are applied centrally; route modules reuse the same domain singletons (e.g. `musicService`) the Discord adapter does.

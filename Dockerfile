@@ -20,14 +20,11 @@ RUN apt-get update \
   && chmod a+rx /usr/local/bin/yt-dlp \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
-
 COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
-
 COPY --from=install /temp/prod/node_modules node_modules
 COPY package.json tsconfig.json ./
 COPY src ./src
-
 RUN mkdir -p music_cache "$DENO_DIR" && chown bun:bun music_cache "$DENO_DIR"
-
+EXPOSE 3000
 USER bun
 ENTRYPOINT ["sh", "-c", "bun run deploy && bun run start"]

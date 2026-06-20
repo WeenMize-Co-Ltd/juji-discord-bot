@@ -143,6 +143,8 @@ jobs:
           ssh deploy-target 'umask 077; cat > ~/juji-discord-bot/.env' <<EOF
           DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
           DISCORD_CLIENT_ID=${{ secrets.DISCORD_CLIENT_ID }}
+          API_PORT=${{ secrets.API_PORT }}
+          API_CORS_ORIGINS=${{ secrets.API_CORS_ORIGINS }}
           OLLAMA_HOST=${{ secrets.OLLAMA_HOST }}
           OLLAMA_MODEL=${{ secrets.OLLAMA_MODEL }}
           LLM_TIMEOUT_MS=${{ secrets.LLM_TIMEOUT_MS }}

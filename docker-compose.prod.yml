@@ -34,13 +34,11 @@ services:
       - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
-      - lavalink_plugins:/opt/Lavalink/plugins
     networks:
       - juji-network
 
 volumes:
   ollama_models:
-  lavalink_plugins:
 
 networks:
   juji-network:

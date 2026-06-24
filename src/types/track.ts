@@ -5,4 +5,5 @@ export interface Track {
   thumbnail?: string
   durationSec: number
   isLive: boolean
+  requestedBy?: string
 }

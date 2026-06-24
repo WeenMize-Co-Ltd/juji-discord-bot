@@ -22,6 +22,7 @@ export const lavalink = new LavalinkManager({
   playerOptions: {
     defaultSearchPlatform: 'ytsearch',
     onEmptyQueue: { destroyAfterMs: 0 },
+    requesterTransformer: (requester) => requester,
   },
 })
 
@@ -56,5 +57,15 @@ export function toTrack(track: LavalinkTrack | UnresolvedTrack): Track {
     thumbnail: info.artworkUrl ?? undefined,
     durationSec: Math.round((info.duration ?? 0) / 1000),
     isLive: info.isStream ?? false,
+    requestedBy: requesterName(track.requester),
   }
+}
+
+function requesterName(requester: unknown): string | undefined {
+  if (typeof requester === 'string') return requester
+  if (requester && typeof requester === 'object' && 'username' in requester) {
+    const username = (requester as { username?: unknown }).username
+    if (typeof username === 'string') return username
+  }
+  return undefined
 }

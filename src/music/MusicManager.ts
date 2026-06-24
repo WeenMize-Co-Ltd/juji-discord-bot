@@ -1,9 +1,14 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Player } from 'lavalink-client'
 import { lavalink, toTrack } from './lavalink'
+import { type PlayerSnapshot, toQueueItem } from './snapshot'
 import type { Track } from '../types/track'
 
 export class MusicManager {
+  getPlayer(guildId: string): Player | undefined {
+    return lavalink.getPlayer(guildId)
+  }
+
   async getOrCreatePlayer(channel: VoiceBasedChannel): Promise<Player> {
     const existing = lavalink.getPlayer(channel.guild.id)
     if (existing) return existing
@@ -40,12 +45,54 @@ export class MusicManager {
     return { skipped, next }
   }
 
-  snapshot(guildId: string): { current: Track | null; upcoming: Track[] } | null {
+  async setPaused(guildId: string, paused: boolean): Promise<boolean> {
+    const player = lavalink.getPlayer(guildId)
+    if (!player) return false
+    if (paused && !player.paused) await player.pause()
+    else if (!paused && player.paused) await player.resume()
+    return true
+  }
+
+  async setVolume(guildId: string, volume: number): Promise<boolean> {
+    const player = lavalink.getPlayer(guildId)
+    if (!player) return false
+    await player.setVolume(Math.max(0, Math.min(100, Math.round(volume))))
+    return true
+  }
+
+  async removeAt(guildId: string, position: number): Promise<boolean> {
+    const player = lavalink.getPlayer(guildId)
+    if (!player) return false
+    const index = position - 1
+    if (index < 0 || index >= player.queue.tracks.length) return false
+    await player.queue.splice(index, 1)
+    return true
+  }
+
+  async move(guildId: string, fromPos: number, toPos: number): Promise<boolean> {
+    const player = lavalink.getPlayer(guildId)
+    if (!player) return false
+    const len = player.queue.tracks.length
+    const from = fromPos - 1
+    if (from < 0 || from >= len) return false
+    const to = Math.max(0, Math.min(toPos - 1, len - 1))
+    if (from === to) return true
+
+    const removed = await player.queue.splice(from, 1)
+    const track = Array.isArray(removed) ? removed[0] : removed
+    if (!track) return false
+    await player.queue.splice(to, 0, track)
+    return true
+  }
+
+  getSnapshot(guildId: string): PlayerSnapshot | null {
     const player = lavalink.getPlayer(guildId)
     if (!player) return null
     return {
-      current: player.queue.current ? toTrack(player.queue.current) : null,
-      upcoming: player.queue.tracks.map(toTrack),
+      status: player.paused ? 'paused' : 'playing',
+      volume: player.volume,
+      current: player.queue.current ? toQueueItem(toTrack(player.queue.current)) : null,
+      queue: player.queue.tracks.map((track) => toQueueItem(toTrack(track))),
     }
   }
 }

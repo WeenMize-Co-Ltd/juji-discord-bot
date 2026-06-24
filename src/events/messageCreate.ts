@@ -81,7 +81,9 @@ export default class MessageCreate extends Event<typeof Events.MessageCreate> {
       return
     }
 
-    const outcome = await musicService.playFromQuery(voiceChannel, result.query)
+    const outcome = await musicService.playFromQuery(voiceChannel, result.query, {
+      requester: { username: message.member?.displayName ?? message.author.username },
+    })
     if (!outcome.ok) {
       await this.reply(message, "🔴 Sorry, I can't play live streams.")
       return

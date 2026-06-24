@@ -1,6 +1,6 @@
 {
   "name": "juji-discord-bot",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "module": "index.ts",
   "dependencies": {
     "@discordjs/voice": "^0.19.2",

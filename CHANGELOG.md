@@ -1,3 +1,15 @@
+# [1.6.0](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/compare/v1.5.0...v1.6.0) (2026-06-24)
+
+
+### Bug Fixes
+
+* add missing env key ([a7d33e3](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/commit/a7d33e3b2b80ee893e20f0c5e4947d66be85ff2d))
+
+
+### Features
+
+* add Supabase JWT auth middleware and /api/me endpoint ([3b6401b](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/commit/3b6401b92068b8bb7f8a8af0df7c2b85bf689964))
+
 # [1.5.0](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/compare/v1.4.0...v1.5.0) (2026-06-20)
 
 

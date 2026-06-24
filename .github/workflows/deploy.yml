@@ -137,6 +137,8 @@ jobs:
           ssh deploy-target 'mkdir -p ~/juji-discord-bot'
           IMAGE="${IMAGE}" envsubst '${IMAGE}' < docker-compose.prod.yml \
             | ssh deploy-target 'cat > ~/juji-discord-bot/docker-compose.yml'
+          # Lavalink mounts this; ship it alongside the compose file.
+          ssh deploy-target 'cat > ~/juji-discord-bot/application.yml' < application.yml
 
       - name: Write server .env from GitHub secrets
         run: |
@@ -151,10 +153,7 @@ jobs:
           LLM_MAX_INPUT_CHARS=${{ secrets.LLM_MAX_INPUT_CHARS }}
           OLLAMA_NUM_CTX=${{ secrets.OLLAMA_NUM_CTX }}
           LLM_ENABLED=${{ secrets.LLM_ENABLED }}
-          MUSIC_CACHE_DIR=${{ secrets.MUSIC_CACHE_DIR }}
-          MUSIC_STREAM_THRESHOLD_SEC=${{ secrets.MUSIC_STREAM_THRESHOLD_SEC }}
-          MUSIC_CACHE_RETENTION_DAYS=${{ secrets.MUSIC_CACHE_RETENTION_DAYS }}
-          MUSIC_CACHE_SWEEP_HOURS=${{ secrets.MUSIC_CACHE_SWEEP_HOURS }}
+          LAVALINK_PASSWORD=${{ secrets.LAVALINK_PASSWORD }}
           SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}
           EOF
 

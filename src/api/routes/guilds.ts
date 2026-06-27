@@ -77,12 +77,21 @@ export const guilds = new Hono()
 
     const payload = c.get('jwtPayload') as SupabaseJwtPayload
     const username = requesterName(payload, body.username)
+    const discordUserId = payload.user_metadata?.provider_id
 
     try {
-      const result = await musicService.addToActivePlayer(guildId, url.trim(), { username })
+      const result = await musicService.addOrSummon(
+        guildId,
+        url.trim(),
+        { username },
+        discordUserId,
+      )
       if (!result.ok) {
-        if (result.reason === 'no-player') {
-          return c.json({ error: 'No active player. Start playback from Discord first.' }, 409)
+        if (result.reason === 'user-not-in-voice') {
+          return c.json({ error: 'user_not_in_voice' }, 409)
+        }
+        if (result.reason === 'join-failed') {
+          return c.json({ error: 'bot_join_failed' }, 409)
         }
         return c.json({ error: "Live streams aren't supported." }, 422)
       }

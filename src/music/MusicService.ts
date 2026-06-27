@@ -11,7 +11,8 @@ export interface Requester {
 export type PlayResult =
   | { ok: true; track: Track; startedNow: boolean; position: number }
   | { ok: false; reason: 'live-unsupported' }
-  | { ok: false; reason: 'no-player' }
+  | { ok: false; reason: 'user-not-in-voice' }
+  | { ok: false; reason: 'join-failed' }
 
 interface PlayOptions {
   requester?: Requester
@@ -30,14 +31,28 @@ export class MusicService {
     return this.enqueue(player, query, options, true)
   }
 
-  async addToActivePlayer(
+  async addOrSummon(
     guildId: string,
     query: string,
     requester: Requester,
+    discordUserId?: string,
   ): Promise<PlayResult> {
-    const player = this.manager.getPlayer(guildId)
-    if (!player) return { ok: false, reason: 'no-player' }
-    return this.enqueue(player, query, { requester }, false)
+    const existing = this.manager.getPlayer(guildId)
+    if (existing) return this.enqueue(existing, query, { requester }, false)
+
+    const channel = discordUserId
+      ? await this.manager.resolveUserVoiceChannel(guildId, discordUserId)
+      : null
+    if (!channel) return { ok: false, reason: 'user-not-in-voice' }
+
+    let player: Player
+    try {
+      player = await this.manager.getOrCreatePlayer(channel)
+    } catch {
+      return { ok: false, reason: 'join-failed' }
+    }
+    
+    return this.enqueue(player, query, { requester }, true)
   }
 
   private async enqueue(

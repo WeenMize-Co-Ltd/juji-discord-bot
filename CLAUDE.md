@@ -13,7 +13,7 @@ This project runs on **Bun** (not Node). It uses Bun-specific APIs (`Bun.Glob`, 
 
 There is no test setup. Lint config uses typescript-eslint `strict` + `stylistic`; Prettier enforces no semicolons, single quotes, trailing commas, 100-char width.
 
-Required env vars (read via `requireEnv`, which throws if missing): `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `SUPABASE_URL`. The HTTP API adds optional `API_PORT` (default 3000) and `API_CORS_ORIGINS` (default `*`). Music adds optional `LAVALINK_HOST` (default `lavalink`), `LAVALINK_PORT` (default 2333), `LAVALINK_PASSWORD` (default `youshallnotpass`), `LAVALINK_SECURE` (default `false`).
+Required env vars (read via `requireEnv`, which throws if missing): `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `SUPABASE_URL`. The HTTP API adds optional `API_PORT` (default 3000) and `API_CORS_ORIGINS` (default `*`). Music adds optional `LAVALINK_HOST` (default `lavalink`), `LAVALINK_PORT` (default 2333), `LAVALINK_PASSWORD` (default `youshallnotpass`), `LAVALINK_SECURE` (default `false`). The recently-played history adds optional `REDIS_URL` (default `redis://redis:6379`), `HISTORY_TTL_SECONDS` (default 86400), `HISTORY_MAX` (default 50).
 
 > **When adding a new env var:** update the `.env` example in [README.md](README.md), the required-env list above, and the deploy workflow's `.env` write step in [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
 

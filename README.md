@@ -72,6 +72,11 @@ Under Docker Compose it's **internal to the Compose network** (not published to 
    # LAVALINK_PASSWORD=youshallnotpass      # must match application.yml / LAVALINK_SERVER_PASSWORD (default: youshallnotpass)
    # LAVALINK_SECURE=false                  # use wss/https to reach the node (default: false)
 
+   # Optional (recently-played history / Redis):
+   # REDIS_URL=redis://redis:6379           # Redis connection URL (default: redis://redis:6379, the compose service)
+   # HISTORY_TTL_SECONDS=86400              # per-guild history list TTL, refreshed on each play (default: 86400 = 24h)
+   # HISTORY_MAX=50                         # max distinct tracks returned per guild (default: 50)
+
    # Optional (chat assistant / Ollama):
    # OLLAMA_HOST=http://localhost:11434   # Ollama base URL (default: http://ollama:11434, the compose service)
    # OLLAMA_MODEL=gemma4:e2b              # model to run (default: gemma4:e2b)

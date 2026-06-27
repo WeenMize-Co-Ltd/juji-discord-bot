@@ -5,8 +5,15 @@ services:
     depends_on:
       - ollama
       - lavalink
+      - redis
     env_file:
       - .env
+    networks:
+      - juji-network
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
     networks:
       - juji-network
 

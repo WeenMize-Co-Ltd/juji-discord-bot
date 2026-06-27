@@ -1,9 +1,10 @@
 import { createBunWebSocket } from 'hono/bun'
 import { HTTPException } from 'hono/http-exception'
 import type { WSContext } from 'hono/ws'
-import { lavalink } from '../../music/lavalink'
+import { musicHistory } from '../../music/history'
+import { lavalink, toTrack } from '../../music/lavalink'
 import { musicManager } from '../../music/MusicManager'
-import type { QueueItemDto } from '../../music/snapshot'
+import { type QueueItemDto, toQueueItem } from '../../music/snapshot'
 import { verifySupabaseJwt } from '../middleware/auth'
 
 const { upgradeWebSocket, websocket } = createBunWebSocket()
@@ -20,6 +21,7 @@ type WsMessage =
     }
   | { type: 'status'; data: 'playing' | 'paused' }
   | { type: 'volume'; data: number }
+  | { type: 'history'; data: QueueItemDto[] }
   | { type: 'alert'; data: string }
 
 const connections = new Map<string, Set<WSContext>>()
@@ -77,6 +79,10 @@ export function broadcastState(guildId: string): void {
   for (const frame of stateFrames(guildId)) broadcast(guildId, frame)
 }
 
+async function broadcastHistory(guildId: string): Promise<void> {
+  broadcast(guildId, { type: 'history', data: await musicHistory.list(guildId) })
+}
+
 export function broadcastAlert(guildId: string, message: string): void {
   broadcast(guildId, { type: 'alert', data: message })
 }
@@ -97,6 +103,12 @@ export const upgradeMusicWs = upgradeWebSocket(async (c) => {
     onOpen(_event, ws) {
       subscribe(guildId, ws)
       for (const frame of stateFrames(guildId)) ws.send(JSON.stringify(frame))
+      void musicHistory
+        .list(guildId)
+        .then((data) => ws.send(JSON.stringify({ type: 'history', data })))
+        .catch(() => {
+          /* best-effort: history is non-critical for the initial frame */
+        })
     },
     onClose(_event, ws) {
       unsubscribe(guildId, ws)
@@ -105,7 +117,17 @@ export const upgradeMusicWs = upgradeWebSocket(async (c) => {
 })
 
 export function initMusicEvents(): void {
-  lavalink.on('trackStart', (player) => broadcastState(player.guildId))
+  lavalink.on('trackStart', (player, track) => {
+    if (track) {
+      void musicHistory
+        .record(player.guildId, toQueueItem(toTrack(track)))
+        .then(() => broadcastHistory(player.guildId))
+        .catch((error: unknown) => {
+          console.error('[history] failed to record/broadcast track:', error)
+        })
+    }
+    broadcastState(player.guildId)
+  })
   lavalink.on('trackEnd', (player) => broadcastState(player.guildId))
   lavalink.on('queueEnd', (player) => broadcastState(player.guildId))
   lavalink.on('playerDestroy', (player) => broadcastState(player.guildId))

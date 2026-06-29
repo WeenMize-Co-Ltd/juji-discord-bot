@@ -3,6 +3,7 @@ import { musicManager } from '../../music/MusicManager'
 import { musicService } from '../../music/MusicService'
 import { broadcastState } from '../ws/music'
 import type { SupabaseJwtPayload } from '../types'
+import { stats } from './stats'
 
 function requesterName(payload: SupabaseJwtPayload, claimed?: unknown): string {
   if (typeof claimed === 'string' && claimed.trim()) return claimed.trim()
@@ -125,3 +126,4 @@ export const guilds = new Hono()
     broadcastState(guildId)
     return c.json({ ok: true })
   })
+  .route('/:guildId/stats', stats)

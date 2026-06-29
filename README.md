@@ -64,6 +64,7 @@ Under Docker Compose it's **internal to the Compose network** (not published to 
    # REDIS_URL=redis://redis:6379           # Redis connection URL (default: redis://redis:6379, the compose service)
    # HISTORY_TTL_SECONDS=86400              # per-guild history list TTL, refreshed on each play (default: 86400 = 24h)
    # HISTORY_MAX=50                         # max distinct tracks returned per guild (default: 50)
+   # STATS_CACHE_TTL_SECONDS=60             # Redis cache TTL for the stats/leaderboard endpoints (default: 60)
 
    # Optional (playback analytics / Postgres):
    # DATABASE_URL=postgres://juji:juji@postgres:5432/juji  # Postgres URL (default: the compose service); analytics disabled if unreachable

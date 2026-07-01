@@ -1,3 +1,12 @@
+## [1.13.1](https://github.com/Ween-Mai-Co-Ltd/juji-discord-bot/compare/v1.13.0...v1.13.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **api:** validate Supabase JWT and JWKS with zod ([1762c3e](https://github.com/Ween-Mai-Co-Ltd/juji-discord-bot/commit/1762c3e27f2903ae832b774755b82117041a2a78))
+* **music:** surface unresolved queries as a typed not-found result ([0e3d373](https://github.com/Ween-Mai-Co-Ltd/juji-discord-bot/commit/0e3d373cc946101696180177f97df3696d9bac9d))
+* **music:** validate cached history entries with zod ([5b8e5a9](https://github.com/Ween-Mai-Co-Ltd/juji-discord-bot/commit/5b8e5a964c8de59e28ed7e5a5fc00c196c7f5aed))
+
 # [1.13.0](https://github.com/Ween-Mais-Co-Ltd/juji-discord-bot/compare/v1.12.3...v1.13.0) (2026-06-29)
 
 

@@ -1,4 +1,4 @@
-import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 
 export const requestSourceValues = ['slash', 'api', 'auto-dj'] as const
 export type RequestSource = (typeof requestSourceValues)[number]
@@ -55,6 +55,17 @@ export const playEvents = pgTable(
     index('play_events_guild_track_idx').on(t.guildId, t.trackId),
   ],
 )
+
+export const guildDjConfigs = pgTable('guild_dj_configs', {
+  guildId: text('guild_id').primaryKey(),
+  voiceChannelId: text('voice_channel_id').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+})
 
 export const listenEvents = pgTable(
   'listen_events',

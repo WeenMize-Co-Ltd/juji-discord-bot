@@ -3,6 +3,7 @@ import { musicManager } from '../../music/MusicManager'
 import { musicService } from '../../music/MusicService'
 import { broadcastState } from '../ws/music'
 import type { SupabaseJwtPayload } from '../types'
+import { dj } from './dj'
 import { stats } from './stats'
 
 function requesterName(payload: SupabaseJwtPayload, claimed?: unknown): string {
@@ -131,3 +132,4 @@ export const guilds = new Hono()
     return c.json({ ok: true })
   })
   .route('/:guildId/stats', stats)
+  .route('/:guildId/dj', dj)

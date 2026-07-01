@@ -136,9 +136,8 @@ class AnalyticsQueries {
     limit: number,
   ): Promise<TopTrack[]> {
     const since = sinceFor(range)
-    const where = since
-      ? and(eq(playEvents.guildId, guildId), gte(playEvents.startedAt, since))
-      : eq(playEvents.guildId, guildId)
+    const conds = [eq(playEvents.guildId, guildId), ne(playEvents.requestSource, 'auto-dj')]
+    if (since) conds.push(gte(playEvents.startedAt, since))
     const playCount = count()
 
     return db
@@ -153,7 +152,7 @@ class AnalyticsQueries {
       })
       .from(playEvents)
       .innerJoin(tracks, eq(tracks.id, playEvents.trackId))
-      .where(where)
+      .where(and(...conds))
       .groupBy(playEvents.trackId, tracks.title, tracks.author, tracks.thumbnail, tracks.url)
       .orderBy(desc(playCount))
       .limit(limit)

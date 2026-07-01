@@ -8,6 +8,13 @@
       "when": 1782734535964,
       "tag": "0000_good_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782933052901,
+      "tag": "0001_groovy_ares",
+      "breakpoints": true
     }
   ]
 }

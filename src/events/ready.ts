@@ -1,4 +1,5 @@
 import { Events, type Client } from 'discord.js'
+import { djManager } from '../dj'
 import { Event } from '../types/event'
 
 export default class Ready extends Event<typeof Events.ClientReady> {
@@ -7,5 +8,6 @@ export default class Ready extends Event<typeof Events.ClientReady> {
 
   execute(client: Client<true>): void {
     console.log(`Ready! Logged in as ${client.user.tag}`)
+    void djManager.onReady()
   }
 }

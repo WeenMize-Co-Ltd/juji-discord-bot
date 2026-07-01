@@ -88,6 +88,9 @@ export const guilds = new Hono()
         discordUserId,
       )
       if (!result.ok) {
+        if (result.reason === 'not-found') {
+          return c.json({ error: `No results found for: ${url}` }, 404)
+        }
         if (result.reason === 'user-not-in-voice') {
           return c.json({ error: 'user_not_in_voice' }, 409)
         }
@@ -98,8 +101,9 @@ export const guilds = new Hono()
       }
       broadcastState(guildId)
       return c.json({ ok: true, position: result.position, track: result.track }, 201)
-    } catch {
-      return c.json({ error: `No results found for: ${url}` }, 404)
+    } catch (err) {
+      console.error('[api] failed to add track to queue:', err)
+      return c.json({ error: 'Internal server error' }, 500)
     }
   })
   .delete('/:guildId/queue/:position', async (c) => {

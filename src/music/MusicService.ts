@@ -15,6 +15,7 @@ export interface Requester {
 
 export type PlayResult =
   | { ok: true; track: Track; startedNow: boolean; position: number }
+  | { ok: false; reason: 'not-found' }
   | { ok: false; reason: 'live-unsupported' }
   | { ok: false; reason: 'user-not-in-voice' }
   | { ok: false; reason: 'join-failed' }
@@ -69,7 +70,7 @@ export class MusicService {
     const result = await player.search({ query }, requester ? { ...requester, query } : requester)
     const first = result.tracks[0]
     if (result.loadType === 'error' || result.loadType === 'empty' || !first) {
-      throw new Error(`No results found for: ${query}`)
+      return { ok: false, reason: 'not-found' }
     }
 
     const track = toTrack(first)

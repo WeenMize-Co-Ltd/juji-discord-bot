@@ -52,7 +52,11 @@ export default class Play extends Command {
     })
 
     if (!result.ok) {
-      await interaction.editReply({ content: "🔴 Sorry, I can't play live streams." })
+      const content =
+        result.reason === 'not-found'
+          ? "🔍 Sorry, I couldn't find anything for that."
+          : "🔴 Sorry, I can't play live streams."
+      await interaction.editReply({ content })
       return
     }
 

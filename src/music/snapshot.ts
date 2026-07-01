@@ -1,12 +1,15 @@
+import { z } from 'zod'
 import type { Track } from '../types/track'
 
-export interface QueueItemDto {
-  title: string
-  thumbnail: string
-  url: string
-  seconds: number
-  addedBy: string
-}
+export const QueueItemDtoSchema = z.object({
+  title: z.string(),
+  thumbnail: z.string(),
+  url: z.string(),
+  seconds: z.number(),
+  addedBy: z.string(),
+})
+
+export type QueueItemDto = z.infer<typeof QueueItemDtoSchema>
 
 export interface PlayerSnapshot {
   status: 'playing' | 'paused'

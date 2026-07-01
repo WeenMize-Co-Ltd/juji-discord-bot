@@ -1,8 +1,10 @@
+import { z } from 'zod'
 import { historyMax, historyTtlSeconds } from '../config'
 import { redis } from '../redis/client'
-import type { QueueItemDto } from './snapshot'
+import { type QueueItemDto, QueueItemDtoSchema } from './snapshot'
 
 const STORE_MAX = 100
+const StringArraySchema = z.array(z.string()).catch([])
 
 function key(guildId: string): string {
   return `history:${guildId}`
@@ -17,16 +19,19 @@ export class MusicHistory {
   }
 
   async list(guildId: string): Promise<QueueItemDto[]> {
-    const raw = (await redis.send('LRANGE', [key(guildId), '0', '-1'])) as string[]
+    const raw = StringArraySchema.parse(await redis.send('LRANGE', [key(guildId), '0', '-1']))
     const seen = new Set<string>()
     const items: QueueItemDto[] = []
     for (const entry of raw) {
-      let item: QueueItemDto
+      let parsed: unknown
       try {
-        item = JSON.parse(entry) as QueueItemDto
+        parsed = JSON.parse(entry)
       } catch {
         continue
       }
+      const result = QueueItemDtoSchema.safeParse(parsed)
+      if (!result.success) continue
+      const item = result.data
       if (seen.has(item.url)) continue
       seen.add(item.url)
       items.push(item)

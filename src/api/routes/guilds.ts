@@ -4,6 +4,7 @@ import { musicService } from '../../music/MusicService'
 import { broadcastState } from '../ws/music'
 import type { SupabaseJwtPayload } from '../types'
 import { dj } from './dj'
+import { filters } from './filters'
 import { stats } from './stats'
 
 function requesterName(payload: SupabaseJwtPayload, claimed?: unknown): string {
@@ -29,7 +30,22 @@ export const guilds = new Hono()
   .get('/:guildId/player', (c) => {
     const snapshot = musicManager.getSnapshot(c.req.param('guildId'))
     return c.json(
-      snapshot ?? { status: 'paused', position: 0, volume: 0, current: null, queue: [] },
+      snapshot ?? {
+        status: 'paused',
+        position: 0,
+        volume: 0,
+        current: null,
+        queue: [],
+        filters: {
+          bassboost: null,
+          nightcore: false,
+          vaporwave: false,
+          rotation: false,
+          karaoke: false,
+          vibrato: false,
+          tremolo: false,
+        },
+      },
     )
   })
   .patch('/:guildId/player', async (c) => {
@@ -133,3 +149,4 @@ export const guilds = new Hono()
   })
   .route('/:guildId/stats', stats)
   .route('/:guildId/dj', dj)
+  .route('/:guildId/filters', filters)

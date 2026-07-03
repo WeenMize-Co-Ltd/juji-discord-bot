@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { FilterState } from './filters'
 import type { Track } from '../types/track'
 
 export const QueueItemDtoSchema = z.object({
@@ -17,6 +18,7 @@ export interface PlayerSnapshot {
   volume: number
   current: QueueItemDto | null
   queue: QueueItemDto[]
+  filters: FilterState
 }
 
 export function toQueueItem(track: Track): QueueItemDto {

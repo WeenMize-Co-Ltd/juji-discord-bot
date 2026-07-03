@@ -1,5 +1,12 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Player } from 'lavalink-client'
+import {
+  applyFilterPatch,
+  clearAllFilters,
+  type FilterPatch,
+  type FilterState,
+  toFilterState,
+} from './filters'
 import { getDiscordClient, lavalink, toTrack } from './lavalink'
 import { type PlayerSnapshot, toQueueItem } from './snapshot'
 import type { Track } from '../types/track'
@@ -98,6 +105,25 @@ export class MusicManager {
     return true
   }
 
+  getFilterState(guildId: string): FilterState | null {
+    const player = lavalink.getPlayer(guildId)
+    return player ? toFilterState(player) : null
+  }
+
+  async applyFilters(guildId: string, patch: FilterPatch): Promise<FilterState | null> {
+    const player = lavalink.getPlayer(guildId)
+    if (!player) return null
+    await applyFilterPatch(player, patch)
+    return toFilterState(player)
+  }
+
+  async clearFilters(guildId: string): Promise<boolean> {
+    const player = lavalink.getPlayer(guildId)
+    if (!player) return false
+    await clearAllFilters(player)
+    return true
+  }
+
   getSnapshot(guildId: string): PlayerSnapshot | null {
     const player = lavalink.getPlayer(guildId)
     if (!player) return null
@@ -107,6 +133,7 @@ export class MusicManager {
       volume: player.volume,
       current: player.queue.current ? toQueueItem(toTrack(player.queue.current)) : null,
       queue: player.queue.tracks.map((track) => toQueueItem(toTrack(track))),
+      filters: toFilterState(player),
     }
   }
 }

@@ -4,6 +4,7 @@ import type { WSContext } from 'hono/ws'
 import { analyticsRecorder } from '../../database'
 import { musicHistory } from '../../music/history'
 import { lavalink, toTrack } from '../../music/lavalink'
+import type { FilterState } from '../../music/filters'
 import { musicManager } from '../../music/MusicManager'
 import type { Requester } from '../../music/MusicService'
 import { type QueueItemDto, toQueueItem } from '../../music/snapshot'
@@ -24,6 +25,7 @@ type WsMessage =
     }
   | { type: 'status'; data: 'playing' | 'paused' }
   | { type: 'volume'; data: number }
+  | { type: 'filters'; data: FilterState }
   | { type: 'history'; data: QueueItemDto[] }
   | { type: 'alert'; data: string }
 
@@ -74,6 +76,7 @@ function stateFrames(guildId: string): WsMessage[] {
   if (snapshot) {
     frames.push({ type: 'status', data: snapshot.status })
     frames.push({ type: 'volume', data: snapshot.volume })
+    frames.push({ type: 'filters', data: snapshot.filters })
   }
   return frames
 }

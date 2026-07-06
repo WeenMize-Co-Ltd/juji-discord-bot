@@ -1,3 +1,10 @@
+## [1.15.2](https://github.com/Ween-Mai-Co-Ltd/juji-discord-bot/compare/v1.15.1...v1.15.2) (2026-07-06)
+
+
+### Bug Fixes
+
+* change DJ feature to randomly play music ([25ea7fc](https://github.com/Ween-Mai-Co-Ltd/juji-discord-bot/commit/25ea7fc376fd3dfcb27634f7f5ce170c5d5d133d))
+
 ## [1.15.1](https://github.com/Ween-Mai-Co-Ltd/juji-discord-bot/compare/v1.15.0...v1.15.1) (2026-07-03)
 
 

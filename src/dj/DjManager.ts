@@ -9,8 +9,8 @@ import { musicService, type Requester } from '../music/MusicService'
 
 /** How many upcoming tracks to keep queued so the player never auto-destroys on an empty queue. */
 const QUEUE_BUFFER = 5
-/** How many of the guild's most-played tracks the DJ cycles through. */
-const TOP_LIMIT = 50
+/** Safety cap on how many of the guild's played tracks are loaded into the DJ's random pool. */
+const POOL_LIMIT = 500
 
 const DJ_REQUESTER: Requester = { username: 'DJ', requestSource: 'auto-dj' }
 
@@ -22,7 +22,6 @@ interface DjConfig {
 interface DjSession {
   channelId: string
   tracks: TopTrack[]
-  cursor: number
   refilling: boolean
 }
 
@@ -129,7 +128,6 @@ class DjManager {
     const session: DjSession = {
       channelId: config.voiceChannelId,
       tracks: [],
-      cursor: 0,
       refilling: false,
     }
     this.sessions.set(guildId, session)
@@ -141,8 +139,8 @@ class DjManager {
         return
       }
 
-      const tracks = await analyticsQueries.topTracks(guildId, 'all', TOP_LIMIT)
-      const first = tracks[0]
+      const tracks = await analyticsQueries.playedTracks(guildId, POOL_LIMIT)
+      const first = this.pickRandom(tracks)
       if (!first) {
         this.sessions.delete(guildId)
         return
@@ -158,7 +156,6 @@ class DjManager {
         await musicManager.stop(guildId)
         return
       }
-      session.cursor = 1
       await this.topUp(guildId)
     } catch (error) {
       console.error('[dj] failed to start session:', error)
@@ -176,8 +173,7 @@ class DjManager {
     try {
       let attempts = 0
       while (player.queue.tracks.length < QUEUE_BUFFER && attempts < session.tracks.length) {
-        const track = session.tracks[session.cursor % session.tracks.length]
-        session.cursor = (session.cursor + 1) % session.tracks.length
+        const track = this.pickRandom(session.tracks)
         attempts++
         if (!track) break
         try {
@@ -189,6 +185,10 @@ class DjManager {
     } finally {
       session.refilling = false
     }
+  }
+
+  private pickRandom(tracks: TopTrack[]): TopTrack | undefined {
+    return tracks[Math.floor(Math.random() * tracks.length)]
   }
 
   private async stop(guildId: string): Promise<void> {

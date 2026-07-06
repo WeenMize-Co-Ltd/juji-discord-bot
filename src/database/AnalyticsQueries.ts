@@ -1,4 +1,4 @@
-import { and, count, countDistinct, desc, eq, gte, isNotNull, ne, sum } from 'drizzle-orm'
+import { and, count, countDistinct, desc, eq, gte, isNotNull, max, ne, sum } from 'drizzle-orm'
 import { databaseClient, db } from './client'
 import { listenEvents, playEvents, tracks, users } from './schema'
 import { statsCacheTtlSeconds } from '../config'
@@ -66,6 +66,13 @@ class AnalyticsQueries {
     if (!databaseClient.enabled) return []
     return this.cached(this.key(guildId, 'tracks', range, limit), () =>
       this.queryTopTracks(guildId, range, limit),
+    )
+  }
+
+  async playedTracks(guildId: string, limit: number): Promise<TopTrack[]> {
+    if (!databaseClient.enabled) return []
+    return this.cached(this.key(guildId, 'played', 'all', limit), () =>
+      this.queryPlayedTracks(guildId, limit),
     )
   }
 
@@ -155,6 +162,29 @@ class AnalyticsQueries {
       .where(and(...conds))
       .groupBy(playEvents.trackId, tracks.title, tracks.author, tracks.thumbnail, tracks.url)
       .orderBy(desc(playCount))
+      .limit(limit)
+  }
+
+  private async queryPlayedTracks(guildId: string, limit: number): Promise<TopTrack[]> {
+    const conds = [eq(playEvents.guildId, guildId), ne(playEvents.requestSource, 'auto-dj')]
+    const playCount = count()
+    const lastPlayedAt = max(playEvents.startedAt)
+
+    return db
+      .select({
+        trackId: playEvents.trackId,
+        title: tracks.title,
+        author: tracks.author,
+        thumbnail: tracks.thumbnail,
+        url: tracks.url,
+        playCount,
+        listenedSec: sum(playEvents.listenedSec).mapWith(Number),
+      })
+      .from(playEvents)
+      .innerJoin(tracks, eq(tracks.id, playEvents.trackId))
+      .where(and(...conds))
+      .groupBy(playEvents.trackId, tracks.title, tracks.author, tracks.thumbnail, tracks.url)
+      .orderBy(desc(lastPlayedAt))
       .limit(limit)
   }
 

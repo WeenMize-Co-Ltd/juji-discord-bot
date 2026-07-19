@@ -65,6 +65,19 @@ export class MusicManager {
     return { skipped, next }
   }
 
+  async jumpTo(guildId: string, position: number): Promise<{ skipped: Track; next: Track } | null> {
+    const player = lavalink.getPlayer(guildId)
+    if (!player?.queue.current) return null
+    const index = position - 1
+    if (index < 0 || index >= player.queue.tracks.length) return null
+
+    const skipped = toTrack(player.queue.current)
+    const target = player.queue.tracks[index]
+    if (!target) return null
+    await player.skip(position)
+    return { skipped, next: toTrack(target) }
+  }
+
   async setPaused(guildId: string, paused: boolean): Promise<boolean> {
     const player = lavalink.getPlayer(guildId)
     if (!player) return false

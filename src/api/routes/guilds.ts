@@ -80,6 +80,17 @@ export const guilds = new Hono()
     broadcastState(guildId)
     return c.json(result)
   })
+  .post('/:guildId/player/jump/:position', async (c) => {
+    const guildId = c.req.param('guildId')
+    const position = Number(c.req.param('position'))
+    if (!Number.isInteger(position) || position < 1) {
+      return c.json({ error: 'Invalid position.' }, 400)
+    }
+    const result = await musicManager.jumpTo(guildId, position)
+    if (!result) return c.json({ error: 'No such queue item.' }, 404)
+    broadcastState(guildId)
+    return c.json(result)
+  })
 
   .get('/:guildId/queue', (c) => {
     const snapshot = musicManager.getSnapshot(c.req.param('guildId'))

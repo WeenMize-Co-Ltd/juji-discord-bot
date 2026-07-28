@@ -1,3 +1,26 @@
+# [1.17.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.16.0...v1.17.0) (2026-07-28)
+
+
+### Bug Fixes
+
+* **api:** authorize the websocket and stop leaking tokens to logs ([d0f52ae](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/d0f52ae6285a035ceffc7b3e0c95b536e8eec3e2))
+* **api:** require guild membership for guild-scoped routes ([2e2cdec](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/2e2cdeccf73cefac3695146ba2bedaf3f36ba534))
+* **bot:** handle async event-handler rejections and dedupe the command loader ([0b11235](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/0b112359814600fc03acbfbed6a32bb3dd296a06))
+* **music:** correct the queue move index and report 1-based positions ([17c0f2f](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/17c0f2f26388f124d1c5d7505e4bcfc671d78a46))
+* **music:** derive usable artwork when Lavalink omits or over-specifies it ([ddc784e](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/ddc784eef4f0b9908ce82ec0ffea1dd560468ba4))
+
+
+### Features
+
+* **analytics:** capture avatars and fix play-duration accounting ([658c357](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/658c3577bbb932b6cd881b15ec321b89f5eeb87f))
+* **commands:** show artwork and requester avatar in /play ([349a0d6](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/349a0d64236453a5324fb88ecf685157b2434e32))
+* **db:** store user avatar url ([c8af08f](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/c8af08fa9f49b062a410884ea6a77e021dd14312))
+
+
+### Performance Improvements
+
+* **dj:** stop re-resolving and duplicating tracks when topping up ([1b9e7a1](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/1b9e7a1f6afc858c0fc26fc8b7cc7a4558d3116c))
+
 # [1.16.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.15.2...v1.16.0) (2026-07-19)
 
 

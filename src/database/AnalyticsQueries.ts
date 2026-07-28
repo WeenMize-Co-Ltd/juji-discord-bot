@@ -1,4 +1,4 @@
-import { and, count, countDistinct, desc, eq, gte, isNotNull, max, ne, sum } from 'drizzle-orm'
+import { and, count, countDistinct, desc, eq, gte, isNotNull, max, ne, sql, sum } from 'drizzle-orm'
 import { databaseClient, db } from './client'
 import { listenEvents, playEvents, tracks, users } from './schema'
 import { statsCacheTtlSeconds } from '../config'
@@ -17,7 +17,28 @@ export interface StatsSummary {
 export interface TopListener {
   discordUserId: string
   displayName: string
+  avatarUrl: string
   listenedSec: number
+}
+
+/**
+ * Discord's fallback avatar for accounts that never set one. Post-migration usernames
+ * pick the variant from the snowflake; there are 6.
+ */
+function defaultAvatarUrl(discordUserId: string): string {
+  const index = (BigInt(discordUserId) >> 22n) % 6n
+  return `https://cdn.discordapp.com/embed/avatars/${index}.png`
+}
+
+/** Never hands the frontend an empty string — it always gets something renderable. */
+function avatarFor(discordUserId: string, stored: string | null): string {
+  if (stored) return stored
+  try {
+    return defaultAvatarUrl(discordUserId)
+  } catch {
+    // Not a snowflake (shouldn't happen) — fall back to variant 0.
+    return 'https://cdn.discordapp.com/embed/avatars/0.png'
+  }
 }
 
 export interface TopTrack {
@@ -33,6 +54,7 @@ export interface TopTrack {
 export interface TopRequester {
   discordUserId: string
   displayName: string
+  avatarUrl: string
   requestCount: number
 }
 
@@ -42,6 +64,13 @@ const EMPTY_SUMMARY: StatsSummary = {
   uniqueTracks: 0,
   uniqueListeners: 0,
 }
+
+/**
+ * Real listening time for a track, summed from `listen_events`. `play_events.played_sec`
+ * is wall-clock — it counts paused time and time with nobody in the channel — so it must
+ * not be used here.
+ */
+const LISTENED_SEC = sql<number>`coalesce(sum(${listenEvents.listenedSec}), 0)::int`
 
 function sinceFor(range: StatsRange): Date | null {
   if (range === 'all') return null
@@ -123,18 +152,21 @@ class AnalyticsQueries {
       : eq(listenEvents.guildId, guildId)
     const total = sum(listenEvents.listenedSec).mapWith(Number)
 
-    return db
+    const rows = await db
       .select({
         discordUserId: listenEvents.discordUserId,
         displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
         listenedSec: total,
       })
       .from(listenEvents)
       .innerJoin(users, eq(users.id, listenEvents.discordUserId))
       .where(where)
-      .groupBy(listenEvents.discordUserId, users.displayName)
+      .groupBy(listenEvents.discordUserId, users.displayName, users.avatarUrl)
       .orderBy(desc(total))
       .limit(limit)
+
+    return rows.map((r) => ({ ...r, avatarUrl: avatarFor(r.discordUserId, r.avatarUrl) }))
   }
 
   private async queryTopTracks(
@@ -145,7 +177,9 @@ class AnalyticsQueries {
     const since = sinceFor(range)
     const conds = [eq(playEvents.guildId, guildId), ne(playEvents.requestSource, 'auto-dj')]
     if (since) conds.push(gte(playEvents.startedAt, since))
-    const playCount = count()
+    // countDistinct, not count: the listen_events join fans each play out into one row
+    // per listener, which would otherwise multiply the play count.
+    const playCount = countDistinct(playEvents.id)
 
     return db
       .select({
@@ -155,10 +189,11 @@ class AnalyticsQueries {
         thumbnail: tracks.thumbnail,
         url: tracks.url,
         playCount,
-        listenedSec: sum(playEvents.listenedSec).mapWith(Number),
+        listenedSec: LISTENED_SEC,
       })
       .from(playEvents)
       .innerJoin(tracks, eq(tracks.id, playEvents.trackId))
+      .leftJoin(listenEvents, eq(listenEvents.playEventId, playEvents.id))
       .where(and(...conds))
       .groupBy(playEvents.trackId, tracks.title, tracks.author, tracks.thumbnail, tracks.url)
       .orderBy(desc(playCount))
@@ -167,7 +202,7 @@ class AnalyticsQueries {
 
   private async queryPlayedTracks(guildId: string, limit: number): Promise<TopTrack[]> {
     const conds = [eq(playEvents.guildId, guildId), ne(playEvents.requestSource, 'auto-dj')]
-    const playCount = count()
+    const playCount = countDistinct(playEvents.id)
     const lastPlayedAt = max(playEvents.startedAt)
 
     return db
@@ -178,10 +213,11 @@ class AnalyticsQueries {
         thumbnail: tracks.thumbnail,
         url: tracks.url,
         playCount,
-        listenedSec: sum(playEvents.listenedSec).mapWith(Number),
+        listenedSec: LISTENED_SEC,
       })
       .from(playEvents)
       .innerJoin(tracks, eq(tracks.id, playEvents.trackId))
+      .leftJoin(listenEvents, eq(listenEvents.playEventId, playEvents.id))
       .where(and(...conds))
       .groupBy(playEvents.trackId, tracks.title, tracks.author, tracks.thumbnail, tracks.url)
       .orderBy(desc(lastPlayedAt))
@@ -206,17 +242,21 @@ class AnalyticsQueries {
       .select({
         discordUserId: playEvents.discordUserId,
         displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
         requestCount,
       })
       .from(playEvents)
       .innerJoin(users, eq(users.id, playEvents.discordUserId))
       .where(and(...conds))
-      .groupBy(playEvents.discordUserId, users.displayName)
+      .groupBy(playEvents.discordUserId, users.displayName, users.avatarUrl)
       .orderBy(desc(requestCount))
       .limit(limit)
 
-    // discordUserId is nullable in the schema but the isNotNull filter guarantees it here.
-    return rows.map((r) => ({ ...r, discordUserId: r.discordUserId as string }))
+    // discordUserId is nullable in the schema; the isNotNull filter above guarantees it
+    // here, but narrow it for real rather than asserting.
+    return rows
+      .filter((r): r is typeof r & { discordUserId: string } => r.discordUserId !== null)
+      .map((r) => ({ ...r, avatarUrl: avatarFor(r.discordUserId, r.avatarUrl) }))
   }
 
   private key(guildId: string, kind: string, range: StatsRange, limit = 0): string {
@@ -226,8 +266,11 @@ class AnalyticsQueries {
   /** Cache-aside via Redis; best-effort, so a Redis outage falls through to a direct DB query. */
   private async cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
     try {
-      const hit = await redis.send('GET', [key])
-      if (typeof hit === 'string') return JSON.parse(hit) as T
+      const hit: unknown = await redis.send('GET', [key])
+      if (typeof hit === 'string') {
+        const parsed: unknown = JSON.parse(hit)
+        return parsed as T
+      }
     } catch {
       /* redis unavailable — fall through to the database */
     }

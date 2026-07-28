@@ -4,6 +4,7 @@ import type { ListenerDuration } from '../database'
 
 interface ListenerState {
   displayName: string
+  avatarUrl: string
   /** When the user (re)started listening, or null while not listening. */
   activeSinceMs: number | null
   accumulatedSec: number
@@ -30,6 +31,7 @@ class VoiceListenerTracker {
         if (member.user.bot || !this.notDeafened(member.voice)) continue
         listeners.set(member.id, {
           displayName: member.displayName,
+          avatarUrl: member.user.displayAvatarURL({ size: 128 }),
           activeSinceMs: now,
           accumulatedSec: 0,
         })
@@ -51,10 +53,12 @@ class VoiceListenerTracker {
     if (listening) {
       if (existing) {
         existing.displayName = member.displayName
-        if (existing.activeSinceMs === null) existing.activeSinceMs = now
+        existing.avatarUrl = member.user.displayAvatarURL({ size: 128 })
+        existing.activeSinceMs ??= now
       } else {
         state.listeners.set(member.id, {
           displayName: member.displayName,
+          avatarUrl: member.user.displayAvatarURL({ size: 128 }),
           activeSinceMs: now,
           accumulatedSec: 0,
         })
@@ -77,7 +81,12 @@ class VoiceListenerTracker {
       if (listener.activeSinceMs !== null) total += (now - listener.activeSinceMs) / 1000
       const listenedSec = Math.round(total)
       if (listenedSec > 0) {
-        result.push({ discordUserId, displayName: listener.displayName, listenedSec })
+        result.push({
+          discordUserId,
+          displayName: listener.displayName,
+          avatarUrl: listener.avatarUrl,
+          listenedSec,
+        })
       }
     }
     return result

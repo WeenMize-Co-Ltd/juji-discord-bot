@@ -1,33 +1,34 @@
-import { type Context, Hono } from 'hono'
+import { Hono } from 'hono'
+import { z } from 'zod'
 import { analyticsQueries, type StatsRange, statsRangeValues } from '../../database'
+import type { AppEnv } from '../types'
+import { zValidator } from '../validator'
 
 const DEFAULT_RANGE: StatsRange = '30d'
 const DEFAULT_LIMIT = 10
 const MAX_LIMIT = 50
 
-function parseRange(c: Context): StatsRange {
-  const raw = c.req.query('range') ?? ''
-  return (statsRangeValues as readonly string[]).includes(raw) ? (raw as StatsRange) : DEFAULT_RANGE
-}
+/** Unknown or absent values fall back to the defaults rather than 400ing. */
+const StatsQuerySchema = z.object({
+  range: z.enum(statsRangeValues).catch(DEFAULT_RANGE),
+  limit: z.coerce.number().int().min(1).max(MAX_LIMIT).catch(DEFAULT_LIMIT),
+})
 
-function parseLimit(c: Context): number {
-  const n = Number(c.req.query('limit'))
-  if (!Number.isInteger(n) || n < 1) return DEFAULT_LIMIT
-  return Math.min(n, MAX_LIMIT)
-}
+const query = zValidator('query', StatsQuerySchema)
 
-function guildId(c: Context): string {
-  return c.req.param('guildId') ?? ''
-}
-
-export const stats = new Hono()
-  .get('/summary', async (c) => c.json(await analyticsQueries.summary(guildId(c), parseRange(c))))
-  .get('/listeners', async (c) =>
-    c.json(await analyticsQueries.topListeners(guildId(c), parseRange(c), parseLimit(c))),
+export const stats = new Hono<AppEnv>()
+  .get('/summary', query, async (c) =>
+    c.json(await analyticsQueries.summary(c.get('guildId'), c.req.valid('query').range)),
   )
-  .get('/tracks', async (c) =>
-    c.json(await analyticsQueries.topTracks(guildId(c), parseRange(c), parseLimit(c))),
-  )
-  .get('/requesters', async (c) =>
-    c.json(await analyticsQueries.topRequesters(guildId(c), parseRange(c), parseLimit(c))),
-  )
+  .get('/listeners', query, async (c) => {
+    const { range, limit } = c.req.valid('query')
+    return c.json(await analyticsQueries.topListeners(c.get('guildId'), range, limit))
+  })
+  .get('/tracks', query, async (c) => {
+    const { range, limit } = c.req.valid('query')
+    return c.json(await analyticsQueries.topTracks(c.get('guildId'), range, limit))
+  })
+  .get('/requesters', query, async (c) => {
+    const { range, limit } = c.req.valid('query')
+    return c.json(await analyticsQueries.topRequesters(c.get('guildId'), range, limit))
+  })

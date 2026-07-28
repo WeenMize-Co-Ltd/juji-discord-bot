@@ -1,35 +1,26 @@
-import { type Context, Hono } from 'hono'
+import { Hono } from 'hono'
+import { z } from 'zod'
 import { djManager } from '../../dj'
+import type { AppEnv } from '../types'
+import { zValidator } from '../validator'
 
-function guildId(c: Context): string {
-  return c.req.param('guildId') ?? ''
-}
+const SetChannelSchema = z.object({
+  voiceChannelId: z.string().trim().min(1, 'A "voiceChannelId" is required.'),
+})
 
-async function readJson(c: Context): Promise<Record<string, unknown>> {
-  try {
-    const body: unknown = await c.req.json()
-    return body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
-  } catch {
-    return {}
-  }
-}
-
-export const dj = new Hono()
-  .get('/', (c) => c.json(djManager.getConfig(guildId(c))))
-  .put('/', async (c) => {
-    const { voiceChannelId } = await readJson(c)
-    if (typeof voiceChannelId !== 'string' || !voiceChannelId.trim()) {
-      return c.json({ error: 'A "voiceChannelId" is required.' }, 400)
-    }
-    const result = await djManager.setChannel(guildId(c), voiceChannelId.trim())
+export const dj = new Hono<AppEnv>()
+  .get('/', (c) => c.json(djManager.getConfig(c.get('guildId'))))
+  .put('/', zValidator('json', SetChannelSchema), async (c) => {
+    const guildId = c.get('guildId')
+    const result = await djManager.setChannel(guildId, c.req.valid('json').voiceChannelId)
     if (!result.ok) {
       if (result.reason === 'not-found') return c.json({ error: 'Channel not found.' }, 404)
       return c.json({ error: 'That channel is not a voice channel.' }, 422)
     }
-    return c.json(djManager.getConfig(guildId(c)))
+    return c.json(djManager.getConfig(guildId))
   })
   .delete('/', async (c) => {
-    await djManager.disable(guildId(c))
+    await djManager.disable(c.get('guildId'))
     return c.json({ ok: true })
   })
-  .get('/channels', async (c) => c.json(await djManager.listVoiceChannels(guildId(c))))
+  .get('/channels', async (c) => c.json(await djManager.listVoiceChannels(c.get('guildId'))))

@@ -8,6 +8,8 @@ import type { Track } from '../types/track'
 export interface Requester {
   username: string
   discordUserId?: string
+  /** Discord CDN avatar of whoever asked for the track; surfaced on the leaderboards. */
+  avatarUrl?: string
   requestSource: RequestSource
   /** Original search string; injected by `enqueue()` — call sites need not set it. */
   query?: string
@@ -85,6 +87,9 @@ export class MusicService {
     await player.queue.add(first)
     if (startedNow) await player.play()
 
+    // 1-based position within the *upcoming* queue, matching `removeAt`/`move`/`jumpTo`,
+    // which all index `queue.tracks` as `position - 1`. A track that starts immediately
+    // becomes `queue.current` rather than entering that list, so it reports 0.
     const position = startedNow ? 0 : player.queue.tracks.length
     return { ok: true, track, startedNow, position }
   }

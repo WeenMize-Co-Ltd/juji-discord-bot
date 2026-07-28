@@ -8,6 +8,7 @@ import {
 import { Command } from '../types/command'
 import { musicService } from '../music/MusicService'
 import { secondsToString } from '../music/format'
+import { resolveArtwork } from '../music/artwork'
 
 export default class Play extends Command {
   data = new SlashCommandBuilder()
@@ -44,6 +45,7 @@ export default class Play extends Command {
       requester: {
         username: interaction.member.displayName,
         discordUserId: interaction.user.id,
+        avatarUrl: interaction.user.displayAvatarURL({ size: 128 }),
         requestSource: 'slash',
       },
       onResolved: async (resolved) => {
@@ -69,7 +71,8 @@ export default class Play extends Command {
       .setURL(track.url)
       .setTimestamp()
 
-    if (track.thumbnail) embed.setThumbnail(track.thumbnail)
+    const artwork = resolveArtwork(track)
+    if (artwork) embed.setThumbnail(artwork)
     if (track.durationSec > 0) {
       embed.addFields({ name: 'Duration', value: secondsToString(track.durationSec), inline: true })
     }

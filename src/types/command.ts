@@ -1,8 +1,7 @@
-import {
+import type {
   SlashCommandBuilder,
-  Collection,
-  type ChatInputCommandInteraction,
-  type SlashCommandOptionsOnlyBuilder,
+  ChatInputCommandInteraction,
+  SlashCommandOptionsOnlyBuilder,
 } from 'discord.js'
 
 export abstract class Command {
@@ -11,8 +10,4 @@ export abstract class Command {
   abstract execute(interaction: ChatInputCommandInteraction): Promise<void>
 }
 
-declare module 'discord.js' {
-  interface Client {
-    commands: Collection<string, Command>
-  }
-}
+// `Client.commands` is augmented once, in ./discord.ts, alongside `cooldowns`.

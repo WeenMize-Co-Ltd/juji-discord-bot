@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
-import type { SupabaseJwtPayload } from '../types'
+import type { AppEnv } from '../types'
 
-export const me = new Hono().get('/', (c) => {
-  const payload = c.get('jwtPayload') as SupabaseJwtPayload
+export const me = new Hono<AppEnv>().get('/', (c) => {
+  const payload = c.get('jwtPayload')
   return c.json({
     id: payload.sub,
     email: payload.email,

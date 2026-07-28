@@ -19,7 +19,7 @@ The music player joins the voice channel you're in and queues tracks per server 
 The bot also runs a small [Hono](https://hono.dev) HTTP server in the **same process** (it's another adapter over the same domain logic, alongside the Discord one). It's the entry point for a future web music control panel.
 
 - Listens on `API_PORT` (default `3000`); `GET /health` returns `{ "status": "ok", "uptime": <seconds>, "timestamp": "..." }`.
-- Cross-origin requests are allowed per `API_CORS_ORIGINS` (default `*`; set a comma-separated allowlist for the panel's origin). Only needed if a browser calls the API cross-origin — a same-stack frontend/proxy that calls it server-side doesn't need CORS.
+- Cross-origin requests are allowed per `API_CORS_ORIGINS` (**default: none** — set a comma-separated allowlist for the panel's origin, or `*` to allow any). Only needed if a browser calls the API cross-origin — a same-stack frontend/proxy that calls it server-side doesn't need CORS, which is why the default is closed.
 
 In local (non-Docker) dev the server is on `localhost`:
 
@@ -52,7 +52,7 @@ Under Docker Compose it's **internal to the Compose network** (not published to 
 
    # Optional (HTTP API):
    # API_PORT=3000                          # port the Hono server listens on (default: 3000)
-   # API_CORS_ORIGINS=*                     # comma-separated CORS allowlist, or * for any (default: *)
+   # API_CORS_ORIGINS=                      # comma-separated CORS allowlist, or * for any (default: none)
 
    # Optional (music player / Lavalink):
    # LAVALINK_HOST=lavalink                 # Lavalink host (default: lavalink, the compose service; use localhost for local dev)

@@ -171,11 +171,19 @@ class DjManager {
 
     session.refilling = true
     try {
-      let attempts = 0
-      while (player.queue.tracks.length < QUEUE_BUFFER && attempts < session.tracks.length) {
-        const track = this.pickRandom(session.tracks)
-        attempts++
-        if (!track) break
+      // Skip anything already queued (or playing) so a small pool doesn't produce a
+      // queue of repeats — `pickRandom` samples with replacement.
+      const queued = new Set<string>()
+      if (player.queue.current?.info.uri) queued.add(player.queue.current.info.uri)
+      for (const queuedTrack of player.queue.tracks) {
+        if (queuedTrack.info.uri) queued.add(queuedTrack.info.uri)
+      }
+
+      // One pass over a shuffled pool: bounded work, and no track is tried twice.
+      for (const track of this.shuffled(session.tracks)) {
+        if (player.queue.tracks.length >= QUEUE_BUFFER) break
+        if (queued.has(track.url)) continue
+        queued.add(track.url)
         try {
           await musicService.addOrSummon(guildId, track.url, DJ_REQUESTER)
         } catch (error) {
@@ -189,6 +197,20 @@ class DjManager {
 
   private pickRandom(tracks: TopTrack[]): TopTrack | undefined {
     return tracks[Math.floor(Math.random() * tracks.length)]
+  }
+
+  /** Fisher-Yates over a copy — the session pool must keep its own ordering. */
+  private shuffled(tracks: TopTrack[]): TopTrack[] {
+    const copy = [...tracks]
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const a = copy[i]
+      const b = copy[j]
+      if (a === undefined || b === undefined) continue
+      copy[i] = b
+      copy[j] = a
+    }
+    return copy
   }
 
   private async stop(guildId: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { type EQBand, FilterManager, type Player } from 'lavalink-client'
 
-export type BassboostPreset = 'Low' | 'Medium' | 'High' | 'Earrape'
+export const bassboostPresetValues = ['Low', 'Medium', 'High', 'Earrape'] as const
+export type BassboostPreset = (typeof bassboostPresetValues)[number]
 
 export interface FilterState {
   bassboost: BassboostPreset | null
@@ -34,20 +35,18 @@ const TOGGLE_METHODS: Record<ToggleFilter, (fm: FilterManager) => Promise<unknow
   tremolo: (fm) => fm.toggleTremolo(),
 }
 
-const BASSBOOST_PRESETS: BassboostPreset[] = ['Low', 'Medium', 'High', 'Earrape']
-
 function sameBands(a: EQBand[], b: EQBand[]): boolean {
   if (a.length !== b.length) return false
   return a.every((band, i) => {
     const other = b[i]
-    return other !== undefined && band.band === other.band && band.gain === other.gain
+    return band.band === other?.band && band.gain === other.gain
   })
 }
 
 /** Bassboost has no boolean flag in lavalink-client — derive it from the active EQ bands. */
 function detectBassboost(bands: EQBand[]): BassboostPreset | null {
   if (bands.length === 0) return null
-  for (const preset of BASSBOOST_PRESETS) {
+  for (const preset of bassboostPresetValues) {
     if (sameBands(bands, FilterManager.EQList[`Bassboost${preset}`])) return preset
   }
   return null

@@ -1,4 +1,4 @@
-import { createBunWebSocket } from 'hono/bun'
+import { upgradeWebSocket, websocket } from 'hono/bun'
 import { HTTPException } from 'hono/http-exception'
 import type { WSContext } from 'hono/ws'
 import { analyticsRecorder } from '../../database'
@@ -10,8 +10,8 @@ import type { Requester } from '../../music/MusicService'
 import { type QueueItemDto, toQueueItem } from '../../music/snapshot'
 import { voiceListenerTracker } from '../../music/VoiceListenerTracker'
 import { verifySupabaseJwt } from '../middleware/auth'
-
-const { upgradeWebSocket, websocket } = createBunWebSocket()
+import { canAccessGuild } from '../middleware/guildAccess'
+import type { SupabaseJwtPayload } from '../types'
 
 type WsMessage =
   | {
@@ -99,10 +99,18 @@ export const upgradeMusicWs = upgradeWebSocket(async (c) => {
   if (!guildId || !token) {
     throw new HTTPException(400, { message: 'guild_id and token query params are required' })
   }
+
+  let payload: SupabaseJwtPayload
   try {
-    await verifySupabaseJwt(token)
+    payload = await verifySupabaseJwt(token)
   } catch {
     throw new HTTPException(401, { message: 'invalid or expired token' })
+  }
+
+  // A valid token alone is not authorization — the socket streams one guild's live
+  // state, so the caller must actually be in that guild.
+  if (!(await canAccessGuild(guildId, payload.user_metadata?.provider_id))) {
+    throw new HTTPException(403, { message: 'you do not have access to this guild' })
   }
 
   return {
@@ -111,7 +119,9 @@ export const upgradeMusicWs = upgradeWebSocket(async (c) => {
       for (const frame of stateFrames(guildId)) ws.send(JSON.stringify(frame))
       void musicHistory
         .list(guildId)
-        .then((data) => ws.send(JSON.stringify({ type: 'history', data })))
+        .then((data) => {
+          ws.send(JSON.stringify({ type: 'history', data }))
+        })
         .catch(() => {
           /* best-effort: history is non-critical for the initial frame */
         })
@@ -121,6 +131,15 @@ export const upgradeMusicWs = upgradeWebSocket(async (c) => {
     },
   }
 })
+
+/**
+ * lavalink-client types `Track.requester` as an empty interface, so it carries no
+ * usable shape. `requesterTransformer` passes our own object through untouched —
+ * narrow it back here rather than asserting over a structurally-empty type.
+ */
+function toRequester(value: unknown): Partial<Requester> {
+  return typeof value === 'object' && value !== null ? value : {}
+}
 
 export function initMusicEvents(): void {
   lavalink.on('trackStart', (player, track) => {
@@ -133,12 +152,12 @@ export function initMusicEvents(): void {
           console.error('[history] failed to record/broadcast track:', error)
         })
 
-      const requester = track.requester as Partial<Requester> | undefined
+      const requester = toRequester(track.requester)
       analyticsRecorder.recordPlay(player.guildId, player.voiceChannelId ?? null, mapped, {
-        discordUserId: requester?.discordUserId,
-        displayName: requester?.username ?? 'unknown',
-        query: requester?.query,
-        requestSource: requester?.requestSource ?? 'auto-dj',
+        discordUserId: requester.discordUserId,
+        displayName: requester.username ?? 'unknown',
+        query: requester.query,
+        requestSource: requester.requestSource ?? 'auto-dj',
       })
       voiceListenerTracker.onTrackStart(player.guildId, player.voiceChannelId ?? null)
     }
@@ -149,7 +168,9 @@ export function initMusicEvents(): void {
     analyticsRecorder.recordEnd(player.guildId, payload.reason, listeners)
     broadcastState(player.guildId)
   })
-  lavalink.on('queueEnd', (player) => broadcastState(player.guildId))
+  lavalink.on('queueEnd', (player) => {
+    broadcastState(player.guildId)
+  })
   lavalink.on('playerDestroy', (player) => {
     const listeners = voiceListenerTracker.endTrack(player.guildId)
     analyticsRecorder.recordEnd(player.guildId, 'stopped', listeners)

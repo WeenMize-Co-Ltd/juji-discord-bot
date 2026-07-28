@@ -1,7 +1,7 @@
-import { Client, Collection, GatewayIntentBits } from 'discord.js'
+import { Client, type ClientEvents, Collection, GatewayIntentBits } from 'discord.js'
 import { token } from './config'
+import { loadCommands } from './loader'
 import { initLavalink } from './music/lavalink'
-import { Command } from './types/command'
 import { Event } from './types/event'
 
 export async function startBot(): Promise<Client> {
@@ -14,18 +14,11 @@ export async function startBot(): Promise<Client> {
 
   initLavalink(client)
 
-  const glob = new Bun.Glob('*.ts')
-
-  for await (const file of glob.scan(`${import.meta.dir}/commands`)) {
-    const CommandClass = ((await import(`./commands/${file}`)) as { default: new () => Command })
-      .default
-    const command = new CommandClass()
-    if (command instanceof Command) {
-      client.commands.set(command.data.name, command)
-    } else {
-      console.warn(`[WARNING] The command at ./commands/${file} does not extend Command.`)
-    }
+  for (const command of await loadCommands()) {
+    client.commands.set(command.data.name, command)
   }
+
+  const glob = new Bun.Glob('*.ts')
 
   for await (const file of glob.scan(`${import.meta.dir}/events`)) {
     const EventClass = ((await import(`./events/${file}`)) as { default: new () => Event }).default
@@ -34,10 +27,22 @@ export async function startBot(): Promise<Client> {
       console.warn(`[WARNING] The event at ./events/${file} does not extend Event.`)
       continue
     }
+    // discord.js ignores the promise an async handler returns, so a rejection would
+    // otherwise escape as an unhandled rejection. Await and log it here instead.
+    const run = (...args: ClientEvents[keyof ClientEvents]): void => {
+      void (async () => {
+        try {
+          await event.execute(...args)
+        } catch (error) {
+          console.error(`[event] "${event.name}" handler failed:`, error)
+        }
+      })()
+    }
+
     if (event.once) {
-      client.once(event.name, (...args) => event.execute(...args))
+      client.once(event.name, run)
     } else {
-      client.on(event.name, (...args) => event.execute(...args))
+      client.on(event.name, run)
     }
   }
 

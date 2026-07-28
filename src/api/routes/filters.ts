@@ -1,60 +1,44 @@
-import { type Context, Hono } from 'hono'
-import type { BassboostPreset, FilterPatch } from '../../music/filters'
+import { Hono } from 'hono'
+import { z } from 'zod'
+import { bassboostPresetValues, type FilterPatch } from '../../music/filters'
 import { musicManager } from '../../music/MusicManager'
 import { broadcastState } from '../ws/music'
+import type { AppEnv } from '../types'
+import { zValidator } from '../validator'
 
-const BASSBOOST_VALUES: BassboostPreset[] = ['Low', 'Medium', 'High', 'Earrape']
-const TOGGLE_KEYS = ['nightcore', 'vaporwave', 'rotation', 'karaoke', 'vibrato', 'tremolo'] as const
+const FilterPatchSchema = z
+  .object({
+    bassboost: z.enum(bassboostPresetValues).nullable(),
+    nightcore: z.boolean(),
+    vaporwave: z.boolean(),
+    rotation: z.boolean(),
+    karaoke: z.boolean(),
+    vibrato: z.boolean(),
+    tremolo: z.boolean(),
+  })
+  .partial()
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: 'Provide at least one filter field to update.',
+  })
 
-function guildId(c: Context): string {
-  return c.req.param('guildId') ?? ''
-}
-
-async function readJson(c: Context): Promise<Record<string, unknown>> {
-  try {
-    const body: unknown = await c.req.json()
-    return body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
-  } catch {
-    return {}
-  }
-}
-
-export const filters = new Hono()
+export const filters = new Hono<AppEnv>()
   .get('/', (c) => {
-    const state = musicManager.getFilterState(guildId(c))
+    const state = musicManager.getFilterState(c.get('guildId'))
     return state ? c.json(state) : c.json({ error: 'No active player.' }, 404)
   })
-  .patch('/', async (c) => {
-    const body = await readJson(c)
-    const patch: FilterPatch = {}
+  .patch('/', zValidator('json', FilterPatchSchema), async (c) => {
+    const guildId = c.get('guildId')
+    const patch: FilterPatch = c.req.valid('json')
 
-    if ('bassboost' in body) {
-      const value = body.bassboost
-      if (value !== null && !BASSBOOST_VALUES.includes(value as BassboostPreset)) {
-        return c.json({ error: 'Invalid "bassboost" value.' }, 400)
-      }
-      patch.bassboost = value as BassboostPreset | null
-    }
-    for (const key of TOGGLE_KEYS) {
-      if (key in body) {
-        if (typeof body[key] !== 'boolean') {
-          return c.json({ error: `"${key}" must be a boolean.` }, 400)
-        }
-        patch[key] = body[key]
-      }
-    }
-    if (Object.keys(patch).length === 0) {
-      return c.json({ error: 'Provide at least one filter field to update.' }, 400)
-    }
-
-    const state = await musicManager.applyFilters(guildId(c), patch)
+    const state = await musicManager.applyFilters(guildId, patch)
     if (!state) return c.json({ error: 'No active player.' }, 404)
-    broadcastState(guildId(c))
+    broadcastState(guildId)
     return c.json(state)
   })
   .delete('/', async (c) => {
-    const ok = await musicManager.clearFilters(guildId(c))
+    const guildId = c.get('guildId')
+    const ok = await musicManager.clearFilters(guildId)
     if (!ok) return c.json({ error: 'No active player.' }, 404)
-    broadcastState(guildId(c))
+    broadcastState(guildId)
     return c.json({ ok: true })
   })

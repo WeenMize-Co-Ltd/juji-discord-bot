@@ -5,7 +5,8 @@ export const SupabaseJwtPayloadSchema = z.object({
   email: z.string().optional(),
   role: z.string().optional(),
   aud: z.string().optional(),
-  exp: z.number().optional(),
+  // Required: a token without an expiry must never be treated as valid.
+  exp: z.number(),
   iat: z.number().optional(),
   user_metadata: z
     .object({
@@ -22,3 +23,14 @@ export const SupabaseJwtPayloadSchema = z.object({
 })
 
 export type SupabaseJwtPayload = z.infer<typeof SupabaseJwtPayloadSchema>
+
+/**
+ * Context shared by every API route. `authMiddleware` sets `jwtPayload`;
+ * `guildAccess` sets `guildId` once it has confirmed the caller may use it.
+ */
+export interface AppEnv {
+  Variables: {
+    jwtPayload: SupabaseJwtPayload
+    guildId: string
+  }
+}

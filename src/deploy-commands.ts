@@ -1,20 +1,8 @@
 import { REST, Routes } from 'discord.js'
-import { Command } from './types/command'
 import { clientId, token } from './config'
+import { loadCommands } from './loader'
 
-const commands: unknown[] = []
-
-const glob = new Bun.Glob('*.ts')
-for await (const file of glob.scan(`${import.meta.dir}/commands`)) {
-  const CommandClass = ((await import(`./commands/${file}`)) as { default: new () => Command })
-    .default
-  const command = new CommandClass()
-  if (command instanceof Command) {
-    commands.push(command.data.toJSON())
-  } else {
-    console.warn(`[WARNING] The command at ./commands/${file} does not extend Command.`)
-  }
-}
+const commands = (await loadCommands()).map((command) => command.data.toJSON())
 
 const rest = new REST().setToken(token)
 

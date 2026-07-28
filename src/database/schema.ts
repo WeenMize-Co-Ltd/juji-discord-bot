@@ -9,6 +9,7 @@ export type EndReason = (typeof endReasonValues)[number]
 export const users = pgTable('users', {
   id: text('id').primaryKey(), // Discord snowflake
   displayName: text('display_name').notNull(),
+  avatarUrl: text('avatar_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
@@ -46,7 +47,16 @@ export const playEvents = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     endedAt: timestamp('ended_at', { withTimezone: true }),
     endReason: text('end_reason').$type<EndReason>(),
-    listenedSec: integer('listened_sec'),
+    /**
+     * Wall-clock seconds the track was open on the player — it counts paused time and
+     * time with nobody listening, so it is *not* listening time. Real per-user listening
+     * lives in `listen_events.listened_sec`.
+     *
+     * The column is still named `listened_sec` on disk; renaming it needs an interactive
+     * `drizzle-kit generate` to be recorded as a rename rather than a drop-and-recreate,
+     * so the correction is made here at the type level for now.
+     */
+    playedSec: integer('listened_sec'),
   },
   (t) => [
     index('play_events_guild_started_idx').on(t.guildId, t.startedAt),

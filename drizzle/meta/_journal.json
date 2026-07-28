@@ -15,6 +15,13 @@
       "when": 1782933052901,
       "tag": "0001_groovy_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785213563742,
+      "tag": "0002_chief_betty_ross",
+      "breakpoints": true
     }
   ]
 }

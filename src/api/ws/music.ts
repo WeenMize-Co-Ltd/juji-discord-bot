@@ -168,6 +168,12 @@ export function initMusicEvents(): void {
     analyticsRecorder.recordEnd(player.guildId, payload.reason, listeners)
     broadcastState(player.guildId)
   })
+  lavalink.on('trackError', (player, _track, payload) => {
+    console.error(
+      `[lavalink] track error in guild ${player.guildId}:`,
+      payload.exception?.message ?? payload.error,
+    )
+  })
   lavalink.on('queueEnd', (player) => {
     broadcastState(player.guildId)
   })

@@ -26,13 +26,18 @@ plugins:
     allowDirectPlaylistIds: true
     # TV is the only OAuth-capable client — put it first so authenticated playback is
     # attempted before the unauthenticated clients (MUSIC has no playback, so it's used
-    # for search only and is skipped for playback).
+    # for search only and is skipped for playback). Some videos still fail on TV/WEB, so
+    # also register the clients that hand out pre-signed URLs (ANDROID_MUSIC, IOS, MWEB),
+    # which bypass the signature-cipher path entirely.
     clients:
       - TV
+      - ANDROID_VR
+      - ANDROID_MUSIC
+      - IOS
+      - MWEB
       - MUSIC
       - WEB
       - WEBEMBEDDED
-      - ANDROID_VR
     # On a datacenter/VPS IP, YouTube demands a logged-in session ("This video requires
     # login"). OAuth with a BURNER Google account is the fix; a poToken alone is not
     # enough. Set YOUTUBE_OAUTH_REFRESH_TOKEN in .env after completing the device login

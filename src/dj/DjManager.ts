@@ -94,6 +94,10 @@ class DjManager {
     const guildId = newState.guild.id
     const config = this.configs.get(guildId)
     if (!config?.enabled) return
+    // Ignore the bot's own join/leave. Otherwise a track that fails to load empties the
+    // queue, the player destroys and the bot leaves, which re-enters `reconcile` and
+    // restarts the DJ — an endless disconnect/reconnect loop.
+    if (newState.member?.user.bot) return
     if (
       oldState.channelId !== config.voiceChannelId &&
       newState.channelId !== config.voiceChannelId

@@ -59,6 +59,7 @@ Under Docker Compose it's **internal to the Compose network** (not published to 
    # LAVALINK_PORT=2333                     # Lavalink port (default: 2333)
    # LAVALINK_PASSWORD=youshallnotpass      # must match application.yml / LAVALINK_SERVER_PASSWORD (default: youshallnotpass)
    # LAVALINK_SECURE=false                  # use wss/https to reach the node (default: false)
+   # YOUTUBE_OAUTH_REFRESH_TOKEN=           # Lavalink-only: burner-account OAuth token; see "YouTube playback" below
 
    # Optional (recently-played history / Redis):
    # REDIS_URL=redis://redis:6379           # Redis connection URL (default: redis://redis:6379, the compose service)
@@ -116,6 +117,7 @@ The repo ships a multi-stage [Dockerfile](Dockerfile) (based on Bun's official i
    DISCORD_CLIENT_ID=your-application-client-id
    SUPABASE_URL=https://your-project-ref.supabase.co
    LAVALINK_PASSWORD=youshallnotpass        # shared by the bot and the lavalink service
+   YOUTUBE_OAUTH_REFRESH_TOKEN=             # Lavalink-only: burner-account OAuth token; see "YouTube playback" below
    ```
 
 3. Build and start the stack in the background:
@@ -136,7 +138,16 @@ To stop: `docker compose down`.
 
 > The container runs `bun run deploy && bun run start` on startup, so slash commands are re-registered with Discord automatically on every launch. The service uses `restart: unless-stopped`, so it survives crashes and server reboots.
 
-The Compose stack also runs a [Lavalink](https://lavalink.dev) v4 node for audio (the bot reaches it at `http://lavalink:2333` over `juji-network` — `LAVALINK_HOST` defaults to `lavalink`, so only `LAVALINK_PASSWORD` needs to match [application.yml](application.yml)). Its config is mounted from `./application.yml`; on boot Lavalink downloads the `youtube-source` plugin into its own container filesystem (watch for `Lavalink is ready to accept connections`). Heap is capped at `-Xmx384m` — bump `_JAVA_OPTIONS` only if it OOMs. If YouTube starts returning "Sign in to confirm you're not a bot", enable the commented `plugins.youtube.oauth` block in `application.yml` with a refresh token.
+The Compose stack also runs a [Lavalink](https://lavalink.dev) v4 node for audio (the bot reaches it at `http://lavalink:2333` over `juji-network` — `LAVALINK_HOST` defaults to `lavalink`, so only `LAVALINK_PASSWORD` needs to match [application.yml](application.yml)). Its config is mounted from `./application.yml`; on boot Lavalink downloads the `youtube-source` plugin into its own container filesystem (watch for `Lavalink is ready to accept connections`). Heap is capped at `-Xmx384m` — bump `_JAVA_OPTIONS` only if it OOMs.
+
+### YouTube playback (OAuth)
+
+On a datacenter/VPS IP, YouTube blocks unauthenticated requests with `This video requires login` — a `poToken` alone is not enough. OAuth with a **burner** Google account is the fix ([`TV`](https://github.com/lavalink-devs/youtube-source#available-clients) is the only OAuth-capable client, and it's enabled in [application.yml](application.yml)).
+
+1. Deploy **without** creating the `YOUTUBE_OAUTH_REFRESH_TOKEN` secret — an undefined secret resolves to an empty string, so Lavalink starts the device flow on boot. Follow the logs: `docker compose logs -f lavalink`.
+2. Lavalink prints a URL (`https://www.google.com/device`) and a code — open it and sign in with the burner account. **Never use your primary account**; YouTube can terminate accounts used by bots.
+3. Copy the `refreshToken` it prints into the `YOUTUBE_OAUTH_REFRESH_TOKEN` GitHub secret, then redeploy — GitHub rejects empty secret values, so add it only once you have the token. (Editing the server's `.env` directly also works, but the next deploy overwrites it.) Later boots reuse the token and skip the flow.
+4. Signature parsing is delegated to the public `cipher.kikkia.dev` remote cipher server (configured in `application.yml`) to avoid `Must find sig function` breakage when YouTube rotates its player. Self-host [yt-cipher](https://github.com/kikkia/yt-cipher) and point `remoteCipher.url` at it if you'd rather not depend on the public instance.
 
 The HTTP API is **not published to the host** — it's reachable only on the Compose network, so a frontend/proxy added to the same stack calls it at `http://juji-discord-bot:${API_PORT:-3000}`. To hit it from the host for debugging, either add a `ports:` mapping to the service or `docker compose exec juji-discord-bot curl http://localhost:3000/health`.
 

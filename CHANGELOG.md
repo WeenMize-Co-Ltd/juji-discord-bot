@@ -1,3 +1,10 @@
+## [1.18.2](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.1...v1.18.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* **music:** widen YouTube clients and stop DJ restart loop ([25370f0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/25370f0818a8c7772f06c35efa1d75d8b5d3fae0))
+
 ## [1.18.1](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.0...v1.18.1) (2026-09-11)
 
 

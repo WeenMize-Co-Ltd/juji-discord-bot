@@ -24,14 +24,32 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
+    # TV is the only OAuth-capable client — put it first so authenticated playback is
+    # attempted before the unauthenticated clients (MUSIC has no playback, so it's used
+    # for search only and is skipped for playback).
     clients:
+      - TV
       - MUSIC
       - WEB
       - WEBEMBEDDED
       - ANDROID_VR
-    # If YouTube starts returning "Sign in to confirm you're not a bot", generate a
-    # refresh token once (device login) and enable OAuth here — the modern replacement
-    # for the old yt-dlp cookies.txt:
-    # oauth:
-    #   enabled: true
-    #   refreshToken: '<generated once via device login>'
+    # On a datacenter/VPS IP, YouTube demands a logged-in session ("This video requires
+    # login"). OAuth with a BURNER Google account is the fix; a poToken alone is not
+    # enough. Set YOUTUBE_OAUTH_REFRESH_TOKEN in .env after completing the device login
+    # (see README). When the token is absent, the OAuth flow is triggered on boot and the
+    # refresh token is printed to the logs.
+    oauth:
+      enabled: true
+      refreshToken: '${YOUTUBE_OAUTH_REFRESH_TOKEN:}'
+    # Delegates signature/player-script parsing to a remote cipher server, avoiding
+    # "Must find sig function from script" breakage when YouTube rotates its player.
+    remoteCipher:
+      url: 'https://cipher.kikkia.dev/'
+      userAgent: 'juji-discord-bot'
+
+# Surfaces the OAuth device-login code and the resulting refresh token in the logs.
+logging:
+  level:
+    root: INFO
+    lavalink: INFO
+    dev.lavalink.youtube.http.YoutubeOauth2Handler: INFO

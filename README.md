@@ -144,9 +144,9 @@ The Compose stack also runs a [Lavalink](https://lavalink.dev) v4 node for audio
 
 On a datacenter/VPS IP, YouTube blocks unauthenticated requests with `This video requires login` — a `poToken` alone is not enough. OAuth with a **burner** Google account is the fix ([`TV`](https://github.com/lavalink-devs/youtube-source#available-clients) is the only OAuth-capable client, and it's enabled in [application.yml](application.yml)).
 
-1. Deploy with an empty `YOUTUBE_OAUTH_REFRESH_TOKEN`, then follow the Lavalink logs: `docker compose logs -f lavalink`.
+1. Deploy **without** creating the `YOUTUBE_OAUTH_REFRESH_TOKEN` secret — an undefined secret resolves to an empty string, so Lavalink starts the device flow on boot. Follow the logs: `docker compose logs -f lavalink`.
 2. Lavalink prints a URL (`https://www.google.com/device`) and a code — open it and sign in with the burner account. **Never use your primary account**; YouTube can terminate accounts used by bots.
-3. Copy the `refreshToken` it prints into `YOUTUBE_OAUTH_REFRESH_TOKEN` in `.env`, then run `docker compose up -d`. Later boots reuse it and skip the flow.
+3. Copy the `refreshToken` it prints into the `YOUTUBE_OAUTH_REFRESH_TOKEN` GitHub secret, then redeploy — GitHub rejects empty secret values, so add it only once you have the token. (Editing the server's `.env` directly also works, but the next deploy overwrites it.) Later boots reuse the token and skip the flow.
 4. Signature parsing is delegated to the public `cipher.kikkia.dev` remote cipher server (configured in `application.yml`) to avoid `Must find sig function` breakage when YouTube rotates its player. Self-host [yt-cipher](https://github.com/kikkia/yt-cipher) and point `remoteCipher.url` at it if you'd rather not depend on the public instance.
 
 The HTTP API is **not published to the host** — it's reachable only on the Compose network, so a frontend/proxy added to the same stack calls it at `http://juji-discord-bot:${API_PORT:-3000}`. To hit it from the host for debugging, either add a `ports:` mapping to the service or `docker compose exec juji-discord-bot curl http://localhost:3000/health`.

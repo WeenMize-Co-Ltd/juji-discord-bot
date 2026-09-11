@@ -1,3 +1,10 @@
+## [1.18.3](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.2...v1.18.3) (2026-09-11)
+
+
+### Bug Fixes
+
+* **music:** pin youtube-source to master snapshot for TV/Android playback ([0409bb7](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/0409bb7ec3be7bb569c1ed8a8bb5c06959fd9771))
+
 ## [1.18.2](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.1...v1.18.2) (2026-09-11)
 
 

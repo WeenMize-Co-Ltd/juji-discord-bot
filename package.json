@@ -1,6 +1,6 @@
 {
   "name": "juji-discord-bot",
-  "version": "1.18.2",
+  "version": "1.18.3",
   "module": "index.ts",
   "dependencies": {
     "discord.js": "^14.26.4",

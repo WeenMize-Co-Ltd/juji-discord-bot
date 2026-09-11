@@ -1,3 +1,10 @@
+## [1.18.1](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.0...v1.18.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **music:** bump youtube-source plugin to 1.18.2 ([6363d3e](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/6363d3ecb9e4c13bbfe82302857c59ce7140591d))
+
 # [1.18.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.17.0...v1.18.0) (2026-09-11)
 
 

@@ -1,3 +1,15 @@
+# [1.18.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.17.0...v1.18.0) (2026-09-11)
+
+
+### Bug Fixes
+
+* **music:** authenticate YouTube playback via OAuth for datacenter IPs ([39971e6](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/39971e68cdca74b23e04bf5369ccb1241e7500f5))
+
+
+### Features
+
+* **config:** forward YOUTUBE_OAUTH_REFRESH_TOKEN to the Lavalink service ([1ffdd83](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/1ffdd83bdc231f2cd45ec715cb87ed704b38ed7f))
+
 # [1.17.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.16.0...v1.17.0) (2026-07-28)
 
 

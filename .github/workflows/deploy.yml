@@ -177,6 +177,7 @@ jobs:
           API_PORT=${{ secrets.API_PORT }}
           API_CORS_ORIGINS=${{ secrets.API_CORS_ORIGINS }}
           LAVALINK_PASSWORD=${{ secrets.LAVALINK_PASSWORD }}
+          YOUTUBE_OAUTH_REFRESH_TOKEN=${{ secrets.YOUTUBE_OAUTH_REFRESH_TOKEN }}
           SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           REDIS_URL=${{ secrets.REDIS_URL }}
           DATABASE_URL=${{ secrets.DATABASE_URL }}

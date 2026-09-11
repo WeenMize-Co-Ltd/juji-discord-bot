@@ -4,8 +4,13 @@ server:
 
 lavalink:
   plugins:
-    - dependency: 'dev.lavalink.youtube:youtube-plugin:1.18.2'
-      snapshot: false
+    # Pinned to a master snapshot: YouTube began rejecting the Cobalt UA on the TVHTML5
+    # player endpoint (~2026-08-18), returning "The page needs to be reloaded", and made
+    # the ANDROID/IOS client versions return HTTP 400. Those are fixed on master (#233,
+    # #231) but not yet in a tagged release (1.18.2 is the latest). Revert to a release
+    # tag once 1.19.0 ships.
+    - dependency: 'dev.lavalink.youtube:youtube-plugin:f45bbb7aebfcbc1c553769e04af6cd43afa8b7c3'
+      snapshot: true
   server:
     password: '${LAVALINK_SERVER_PASSWORD:youshallnotpass}'
     sources:

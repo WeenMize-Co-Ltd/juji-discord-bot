@@ -6,16 +6,27 @@ import { type QueueItemDto, QueueItemDtoSchema } from './snapshot'
 const STORE_MAX = 100
 const StringArraySchema = z.array(z.string()).catch([])
 
+const RECORD_SCRIPT = `
+redis.call('LPUSH', KEYS[1], ARGV[1])
+redis.call('LTRIM', KEYS[1], 0, tonumber(ARGV[2]) - 1)
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+return 1
+`
+
 function key(guildId: string): string {
   return `history:${guildId}`
 }
 
 export class MusicHistory {
   async record(guildId: string, item: QueueItemDto): Promise<void> {
-    const k = key(guildId)
-    await redis.send('LPUSH', [k, JSON.stringify(item)])
-    await redis.send('LTRIM', [k, '0', String(STORE_MAX - 1)])
-    await redis.send('EXPIRE', [k, String(historyTtlSeconds)])
+    await redis.send('EVAL', [
+      RECORD_SCRIPT,
+      '1',
+      key(guildId),
+      JSON.stringify(item),
+      String(STORE_MAX),
+      String(historyTtlSeconds),
+    ])
   }
 
   async list(guildId: string): Promise<QueueItemDto[]> {

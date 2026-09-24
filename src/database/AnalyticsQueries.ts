@@ -1,4 +1,17 @@
-import { and, count, countDistinct, desc, eq, gte, isNotNull, max, ne, sql, sum } from 'drizzle-orm'
+import {
+  and,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  max,
+  ne,
+  sql,
+  sum,
+} from 'drizzle-orm'
 import { databaseClient, db } from './client'
 import { listenEvents, playEvents, tracks, users } from './schema'
 import { statsCacheTtlSeconds } from '../config'
@@ -21,10 +34,6 @@ export interface TopListener {
   listenedSec: number
 }
 
-/**
- * Discord's fallback avatar for accounts that never set one. Post-migration usernames
- * pick the variant from the snowflake; there are 6.
- */
 function defaultAvatarUrl(discordUserId: string): string {
   const index = (BigInt(discordUserId) >> 22n) % 6n
   return `https://cdn.discordapp.com/embed/avatars/${index}.png`
@@ -36,7 +45,6 @@ function avatarFor(discordUserId: string, stored: string | null): string {
   try {
     return defaultAvatarUrl(discordUserId)
   } catch {
-    // Not a snowflake (shouldn't happen) — fall back to variant 0.
     return 'https://cdn.discordapp.com/embed/avatars/0.png'
   }
 }
@@ -65,11 +73,10 @@ const EMPTY_SUMMARY: StatsSummary = {
   uniqueListeners: 0,
 }
 
-/**
- * Real listening time for a track, summed from `listen_events`. `play_events.played_sec`
- * is wall-clock — it counts paused time and time with nobody in the channel — so it must
- * not be used here.
- */
+const CACHE_LIMIT = 50
+const LOCAL_TTL_MS = 3_000
+const LOCAL_MAX = 500
+
 const LISTENED_SEC = sql<number>`coalesce(sum(${listenEvents.listenedSec}), 0)::int`
 
 function sinceFor(range: StatsRange): Date | null {
@@ -79,6 +86,9 @@ function sinceFor(range: StatsRange): Date | null {
 }
 
 class AnalyticsQueries {
+  private readonly local = new Map<string, { value: unknown; expiresAt: number }>()
+  private readonly inflight = new Map<string, Promise<unknown>>()
+
   async summary(guildId: string, range: StatsRange): Promise<StatsSummary> {
     if (!databaseClient.enabled) return EMPTY_SUMMARY
     return this.cached(this.key(guildId, 'summary', range), () => this.querySummary(guildId, range))
@@ -86,16 +96,18 @@ class AnalyticsQueries {
 
   async topListeners(guildId: string, range: StatsRange, limit: number): Promise<TopListener[]> {
     if (!databaseClient.enabled) return []
-    return this.cached(this.key(guildId, 'listeners', range, limit), () =>
-      this.queryTopListeners(guildId, range, limit),
+    const rows = await this.cached(this.key(guildId, 'listeners', range), () =>
+      this.queryTopListeners(guildId, range, CACHE_LIMIT),
     )
+    return rows.slice(0, limit)
   }
 
   async topTracks(guildId: string, range: StatsRange, limit: number): Promise<TopTrack[]> {
     if (!databaseClient.enabled) return []
-    return this.cached(this.key(guildId, 'tracks', range, limit), () =>
-      this.queryTopTracks(guildId, range, limit),
+    const rows = await this.cached(this.key(guildId, 'tracks', range), () =>
+      this.queryTopTracks(guildId, range, CACHE_LIMIT),
     )
+    return rows.slice(0, limit)
   }
 
   async playedTracks(guildId: string, limit: number): Promise<TopTrack[]> {
@@ -107,9 +119,10 @@ class AnalyticsQueries {
 
   async topRequesters(guildId: string, range: StatsRange, limit: number): Promise<TopRequester[]> {
     if (!databaseClient.enabled) return []
-    return this.cached(this.key(guildId, 'requesters', range, limit), () =>
-      this.queryTopRequesters(guildId, range, limit),
+    const rows = await this.cached(this.key(guildId, 'requesters', range), () =>
+      this.queryTopRequesters(guildId, range, CACHE_LIMIT),
     )
+    return rows.slice(0, limit)
   }
 
   private async querySummary(guildId: string, range: StatsRange): Promise<StatsSummary> {
@@ -121,17 +134,19 @@ class AnalyticsQueries {
       ? and(eq(listenEvents.guildId, guildId), gte(listenEvents.createdAt, since))
       : eq(listenEvents.guildId, guildId)
 
-    const [playAgg] = await db
-      .select({ totalPlays: count(), uniqueTracks: countDistinct(playEvents.trackId) })
-      .from(playEvents)
-      .where(playWhere)
-    const [listenAgg] = await db
-      .select({
-        totalListeningSec: sum(listenEvents.listenedSec).mapWith(Number),
-        uniqueListeners: countDistinct(listenEvents.discordUserId),
-      })
-      .from(listenEvents)
-      .where(listenWhere)
+    const [[playAgg], [listenAgg]] = await Promise.all([
+      db
+        .select({ totalPlays: count(), uniqueTracks: countDistinct(playEvents.trackId) })
+        .from(playEvents)
+        .where(playWhere),
+      db
+        .select({
+          totalListeningSec: sum(listenEvents.listenedSec).mapWith(Number),
+          uniqueListeners: countDistinct(listenEvents.discordUserId),
+        })
+        .from(listenEvents)
+        .where(listenWhere),
+    ])
 
     return {
       totalPlays: playAgg?.totalPlays ?? 0,
@@ -177,11 +192,9 @@ class AnalyticsQueries {
     const since = sinceFor(range)
     const conds = [eq(playEvents.guildId, guildId), ne(playEvents.requestSource, 'auto-dj')]
     if (since) conds.push(gte(playEvents.startedAt, since))
-    // countDistinct, not count: the listen_events join fans each play out into one row
-    // per listener, which would otherwise multiply the play count.
-    const playCount = countDistinct(playEvents.id)
+    const playCount = count()
 
-    return db
+    const rows = await db
       .select({
         trackId: playEvents.trackId,
         title: tracks.title,
@@ -189,23 +202,27 @@ class AnalyticsQueries {
         thumbnail: tracks.thumbnail,
         url: tracks.url,
         playCount,
-        listenedSec: LISTENED_SEC,
       })
       .from(playEvents)
       .innerJoin(tracks, eq(tracks.id, playEvents.trackId))
-      .leftJoin(listenEvents, eq(listenEvents.playEventId, playEvents.id))
       .where(and(...conds))
       .groupBy(playEvents.trackId, tracks.title, tracks.author, tracks.thumbnail, tracks.url)
       .orderBy(desc(playCount))
       .limit(limit)
+
+    const listened = await this.listenedSeconds(
+      guildId,
+      since,
+      rows.map((row) => row.trackId),
+    )
+    return rows.map((row) => ({ ...row, listenedSec: listened.get(row.trackId) ?? 0 }))
   }
 
   private async queryPlayedTracks(guildId: string, limit: number): Promise<TopTrack[]> {
     const conds = [eq(playEvents.guildId, guildId), ne(playEvents.requestSource, 'auto-dj')]
-    const playCount = countDistinct(playEvents.id)
-    const lastPlayedAt = max(playEvents.startedAt)
+    const playCount = count()
 
-    return db
+    const rows = await db
       .select({
         trackId: playEvents.trackId,
         title: tracks.title,
@@ -213,15 +230,45 @@ class AnalyticsQueries {
         thumbnail: tracks.thumbnail,
         url: tracks.url,
         playCount,
-        listenedSec: LISTENED_SEC,
       })
       .from(playEvents)
       .innerJoin(tracks, eq(tracks.id, playEvents.trackId))
-      .leftJoin(listenEvents, eq(listenEvents.playEventId, playEvents.id))
       .where(and(...conds))
       .groupBy(playEvents.trackId, tracks.title, tracks.author, tracks.thumbnail, tracks.url)
-      .orderBy(desc(lastPlayedAt))
+      .orderBy(desc(max(playEvents.startedAt)))
       .limit(limit)
+
+    const listened = await this.listenedSeconds(
+      guildId,
+      null,
+      rows.map((row) => row.trackId),
+    )
+    return rows.map((row) => ({ ...row, listenedSec: listened.get(row.trackId) ?? 0 }))
+  }
+
+  private async listenedSeconds(
+    guildId: string,
+    since: Date | null,
+    trackIds: string[],
+  ): Promise<Map<string, number>> {
+    if (trackIds.length === 0) return new Map()
+
+    const conds = [
+      eq(listenEvents.guildId, guildId),
+      eq(playEvents.guildId, guildId),
+      ne(playEvents.requestSource, 'auto-dj'),
+      inArray(playEvents.trackId, trackIds),
+    ]
+    if (since) conds.push(gte(playEvents.startedAt, since))
+
+    const rows = await db
+      .select({ trackId: playEvents.trackId, listenedSec: LISTENED_SEC })
+      .from(listenEvents)
+      .innerJoin(playEvents, eq(playEvents.id, listenEvents.playEventId))
+      .where(and(...conds))
+      .groupBy(playEvents.trackId)
+
+    return new Map(rows.map((row) => [row.trackId, row.listenedSec]))
   }
 
   private async queryTopRequesters(
@@ -263,24 +310,48 @@ class AnalyticsQueries {
     return `stats:${guildId}:${kind}:${range}:${limit}`
   }
 
-  /** Cache-aside via Redis; best-effort, so a Redis outage falls through to a direct DB query. */
   private async cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const local = this.local.get(key)
+    if (local && local.expiresAt > Date.now()) return local.value as T
+
+    const pending = this.inflight.get(key)
+    if (pending) return pending as Promise<T>
+
+    const promise = this.load(key, fn).finally(() => {
+      this.inflight.delete(key)
+    })
+    this.inflight.set(key, promise)
+    return promise
+  }
+
+  private async load<T>(key: string, fn: () => Promise<T>): Promise<T> {
     try {
       const hit: unknown = await redis.send('GET', [key])
       if (typeof hit === 'string') {
         const parsed: unknown = JSON.parse(hit)
+        this.remember(key, parsed)
         return parsed as T
       }
     } catch {
       /* redis unavailable — fall through to the database */
     }
+
     const data = await fn()
     try {
       await redis.send('SET', [key, JSON.stringify(data), 'EX', String(statsCacheTtlSeconds)])
     } catch {
       /* best-effort: a failed cache write must not fail the request */
     }
+    this.remember(key, data)
     return data
+  }
+
+  private remember(key: string, value: unknown): void {
+    if (this.local.size >= LOCAL_MAX) {
+      const oldest = this.local.keys().next().value
+      if (oldest !== undefined) this.local.delete(oldest)
+    }
+    this.local.set(key, { value, expiresAt: Date.now() + LOCAL_TTL_MS })
   }
 }
 

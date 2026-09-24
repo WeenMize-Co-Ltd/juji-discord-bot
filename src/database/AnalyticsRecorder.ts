@@ -65,20 +65,16 @@ class AnalyticsRecorder {
       durationSec: track.durationSec,
       sourceName: track.sourceName,
     }
-    await db
-      .insert(tracks)
-      .values({ id: track.id, ...trackValues })
-      .onConflictDoUpdate({ target: tracks.id, set: { ...trackValues, updatedAt: new Date() } })
 
-    if (ctx.discordUserId) {
-      await this.upsertUsers([
-        { id: ctx.discordUserId, displayName: ctx.displayName, avatarUrl: ctx.avatarUrl },
-      ])
-    }
-
-    // A previous play that never saw its `trackEnd` would otherwise sit open forever and
-    // be silently dropped by the overwrite below. Close it on a best-effort basis first.
-    await this.closeOrphaned(guildId)
+    await Promise.all([
+      this.upsertTrack(track.id, trackValues),
+      ctx.discordUserId
+        ? this.upsertUsers([
+            { id: ctx.discordUserId, displayName: ctx.displayName, avatarUrl: ctx.avatarUrl },
+          ])
+        : Promise.resolve(),
+      this.closeOrphaned(guildId),
+    ])
 
     const [row] = await db
       .insert(playEvents)
@@ -102,21 +98,25 @@ class AnalyticsRecorder {
     listeners: ListenerDuration[],
   ): Promise<void> {
     const playedSec = Math.round((Date.now() - openEvent.startedAtMs) / 1000)
-    await db
-      .update(playEvents)
-      .set({ endedAt: new Date(), endReason, playedSec })
-      .where(eq(playEvents.id, openEvent.eventId))
-
     const valid = listeners.filter((listener) => listener.listenedSec > 0)
-    if (valid.length === 0) return
 
-    await this.upsertUsers(
-      valid.map((listener) => ({
-        id: listener.discordUserId,
-        displayName: listener.displayName,
-        avatarUrl: listener.avatarUrl,
-      })),
-    )
+    await Promise.all([
+      db
+        .update(playEvents)
+        .set({ endedAt: new Date(), endReason, playedSec })
+        .where(eq(playEvents.id, openEvent.eventId)),
+      valid.length > 0
+        ? this.upsertUsers(
+            valid.map((listener) => ({
+              id: listener.discordUserId,
+              displayName: listener.displayName,
+              avatarUrl: listener.avatarUrl,
+            })),
+          )
+        : Promise.resolve(),
+    ])
+
+    if (valid.length === 0) return
     await db.insert(listenEvents).values(
       valid.map((listener) => ({
         playEventId: openEvent.eventId,
@@ -127,7 +127,6 @@ class AnalyticsRecorder {
     )
   }
 
-  /** Closes an open event this guild never got a `trackEnd` for. */
   private async closeOrphaned(guildId: string): Promise<void> {
     const stale = this.open.get(guildId)
     if (!stale) return
@@ -142,12 +141,37 @@ class AnalyticsRecorder {
       .where(eq(playEvents.id, stale.eventId))
   }
 
-  /** Drops in-memory entries too old to ever be closed legitimately. */
   private sweepOpen(): void {
     const cutoff = Date.now() - OPEN_EVENT_MAX_AGE_MS
     for (const [guildId, event] of this.open) {
       if (event.startedAtMs < cutoff) this.open.delete(guildId)
     }
+  }
+
+  private upsertTrack(
+    id: string,
+    values: {
+      title: string
+      author: string
+      url: string
+      thumbnail: string | null
+      durationSec: number
+      sourceName: string
+    },
+  ): Promise<unknown> {
+    return db
+      .insert(tracks)
+      .values({ id, ...values })
+      .onConflictDoUpdate({
+        target: tracks.id,
+        set: { ...values, updatedAt: new Date() },
+        setWhere: sql`${tracks.title} is distinct from excluded.title
+          or ${tracks.author} is distinct from excluded.author
+          or ${tracks.url} is distinct from excluded.url
+          or ${tracks.thumbnail} is distinct from excluded.thumbnail
+          or ${tracks.durationSec} is distinct from excluded.duration_sec
+          or ${tracks.sourceName} is distinct from excluded.source_name`,
+      })
   }
 
   private upsertUsers(
@@ -160,10 +184,11 @@ class AnalyticsRecorder {
         target: users.id,
         set: {
           displayName: sql`excluded.display_name`,
-          // Keep the stored avatar when this write doesn't carry one.
           avatarUrl: sql`coalesce(excluded.avatar_url, ${users.avatarUrl})`,
           updatedAt: new Date(),
         },
+        setWhere: sql`${users.displayName} is distinct from excluded.display_name
+          or ${users.avatarUrl} is distinct from coalesce(excluded.avatar_url, ${users.avatarUrl})`,
       })
   }
 }

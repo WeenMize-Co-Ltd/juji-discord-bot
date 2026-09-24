@@ -8,4 +8,5 @@ export interface Track {
   sourceName: string
   isLive: boolean
   requestedBy?: string
+  entryId?: string
 }

@@ -3,61 +3,118 @@ import { getDiscordClient } from '../../music/lavalink'
 import { redis } from '../../redis/client'
 import type { AppEnv } from '../types'
 
-/** How long a confirmed membership is trusted before Discord is asked again. */
-const ALLOW_TTL_SECONDS = 60
-/** Denials expire sooner, so a user who just joined isn't locked out for long. */
-const DENY_TTL_SECONDS = 15
+const ALLOW_TTL_SECONDS = 120
+const ALLOW_TTL_JITTER_SECONDS = 30
+const DENY_TTL_SECONDS = 30
+const LOCAL_TTL_MS = 30_000
+const LOCAL_MAX = 1_000
+const UNKNOWN_MEMBER = 10007
+
+interface AccessDecision {
+  allowed: boolean
+  expiresAt: number
+}
+
+const local = new Map<string, AccessDecision>()
+const inflight = new Map<string, Promise<boolean>>()
 
 function cacheKey(guildId: string, discordUserId: string): string {
   return `guildaccess:${guildId}:${discordUserId}`
 }
 
-/**
- * Asks Discord whether the user is a member of the guild.
- *
- * `guild.members.fetch()` is a REST call — the `GuildMembers` intent is not enabled
- * and is not needed — so the result is cached in Redis to keep one API call from
- * riding on every request.
- */
-async function isGuildMember(guildId: string, discordUserId: string): Promise<boolean> {
-  const key = cacheKey(guildId, discordUserId)
+function remember(key: string, allowed: boolean): void {
+  if (local.size >= LOCAL_MAX) {
+    const oldest = local.keys().next().value
+    if (oldest !== undefined) local.delete(oldest)
+  }
+  local.set(key, { allowed, expiresAt: Date.now() + LOCAL_TTL_MS })
+}
+
+function isUnknownMember(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && 'code' in error && error.code === UNKNOWN_MEMBER
+  )
+}
+
+async function askDiscord(
+  guildId: string,
+  discordUserId: string,
+): Promise<{ allowed: boolean; cacheable: boolean }> {
+  const client = getDiscordClient()
+  if (!client) return { allowed: false, cacheable: false }
+
+  let guild = client.guilds.cache.get(guildId)
+  if (!guild) {
+    try {
+      guild = await client.guilds.fetch(guildId)
+    } catch {
+      return { allowed: false, cacheable: false }
+    }
+  }
+
+  try {
+    await guild.members.fetch(discordUserId)
+    return { allowed: true, cacheable: true }
+  } catch (error) {
+    return { allowed: false, cacheable: isUnknownMember(error) }
+  }
+}
+
+async function lookupGuildMember(
+  guildId: string,
+  discordUserId: string,
+  key: string,
+): Promise<boolean> {
   try {
     const cached: unknown = await redis.send('GET', [key])
-    if (cached === '1') return true
-    if (cached === '0') return false
+    if (cached === '1') {
+      remember(key, true)
+      return true
+    }
+    if (cached === '0') {
+      remember(key, false)
+      return false
+    }
   } catch {
     /* redis unavailable — fall through and ask Discord directly */
   }
 
-  const client = getDiscordClient()
-  if (!client) return false
+  const decision = await askDiscord(guildId, discordUserId)
+  if (!decision.cacheable) return decision.allowed
 
-  const guild =
-    client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null))
-  const member = guild ? await guild.members.fetch(discordUserId).catch(() => null) : null
-  const allowed = member !== null
-
+  remember(key, decision.allowed)
   try {
-    const ttl = allowed ? ALLOW_TTL_SECONDS : DENY_TTL_SECONDS
-    await redis.send('SET', [key, allowed ? '1' : '0', 'EX', String(ttl)])
+    const ttl = decision.allowed
+      ? ALLOW_TTL_SECONDS + Math.floor(Math.random() * ALLOW_TTL_JITTER_SECONDS)
+      : DENY_TTL_SECONDS
+    await redis.send('SET', [key, decision.allowed ? '1' : '0', 'EX', String(ttl)])
   } catch {
     /* best-effort: a failed cache write must not fail the request */
   }
-  return allowed
+  return decision.allowed
 }
 
-/**
- * Authorizes `/api/guilds/:guildId/*`.
- *
- * `authMiddleware` only proves the caller holds a valid Supabase token — without this
- * every authenticated user could drive any guild the bot is in. Mount it directly after
- * `authMiddleware`; downstream handlers read the verified id from `c.get('guildId')`.
- */
+async function isGuildMember(guildId: string, discordUserId: string): Promise<boolean> {
+  const key = cacheKey(guildId, discordUserId)
+
+  const localHit = local.get(key)
+  if (localHit && localHit.expiresAt > Date.now()) return localHit.allowed
+
+  // Coalesce concurrent checks (a page load fires several API/stream requests at once).
+  const pending = inflight.get(key)
+  if (pending) return pending
+
+  const decision = lookupGuildMember(guildId, discordUserId, key).finally(() => {
+    inflight.delete(key)
+  })
+  inflight.set(key, decision)
+  return decision
+}
+
 export const guildAccess = createMiddleware<AppEnv>(async (c, next) => {
   const guildId = c.req.param('guildId')
   if (!guildId) return c.json({ error: 'A guild id is required.' }, 400)
 
-  // Supabase stores the Discord snowflake from the OAuth provider here.
   const discordUserId = c.get('jwtPayload').user_metadata?.provider_id
   if (!discordUserId) {
     return c.json({ error: 'This account is not linked to Discord.' }, 403)
@@ -72,7 +129,6 @@ export const guildAccess = createMiddleware<AppEnv>(async (c, next) => {
   return undefined
 })
 
-/** Same check, for call sites without a Hono context (the websocket upgrade). */
 export async function canAccessGuild(
   guildId: string,
   discordUserId: string | undefined,

@@ -3,13 +3,9 @@ import { resolveArtwork } from './artwork'
 import type { FilterState } from './filters'
 import type { Track } from '../types/track'
 
-/**
- * The single track shape the API and websocket return. `id` and `author` come straight
- * from Lavalink, so the web player no longer has to synthesize keys from URLs or guess
- * the artist by splitting the title.
- */
 export const QueueItemDtoSchema = z.object({
   id: z.string(),
+  entryId: z.string().optional(),
   title: z.string(),
   author: z.string(),
   thumbnail: z.string(),
@@ -32,6 +28,7 @@ export interface PlayerSnapshot {
 export function toQueueItem(track: Track): QueueItemDto {
   return {
     id: track.id,
+    entryId: track.entryId,
     title: track.title,
     author: track.author,
     thumbnail: resolveArtwork(track),

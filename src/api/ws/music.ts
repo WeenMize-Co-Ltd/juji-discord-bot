@@ -4,94 +4,119 @@ import { HTTPException } from 'hono/http-exception'
 import { analyticsRecorder } from '../../database'
 import { musicHistory } from '../../music/history'
 import { lavalink, toTrack } from '../../music/lavalink'
-import type { FilterState } from '../../music/filters'
 import { musicManager } from '../../music/MusicManager'
 import type { Requester } from '../../music/MusicService'
-import { type QueueItemDto, toQueueItem } from '../../music/snapshot'
+import { type PlayerSnapshot, type QueueItemDto, toQueueItem } from '../../music/snapshot'
 import { voiceListenerTracker } from '../../music/VoiceListenerTracker'
 import { verifySupabaseJwt } from '../middleware/auth'
 import { canAccessGuild } from '../middleware/guildAccess'
 import type { SupabaseJwtPayload } from '../types'
+import { buildStateFrames, type FrameVersion, type WsMessage } from './frames'
 
-type WsMessage =
-  | {
-      type: 'playlist'
-      data: {
-        currentlyPlaying: QueueItemDto | null
-        queueList: QueueItemDto[]
-        position: number
-        timestamp: string
-      }
-    }
-  | { type: 'status'; data: 'playing' | 'paused' }
-  | { type: 'volume'; data: number }
-  | { type: 'filters'; data: FilterState }
-  | { type: 'history'; data: QueueItemDto[] }
-  | { type: 'alert'; data: string }
+interface Connection {
+  ws: ServerWebSocket
+  version: FrameVersion
+}
 
-const connections = new Map<string, Set<ServerWebSocket>>()
+const connections = new Map<string, Set<Connection>>()
 
-function subscribe(guildId: string, ws: ServerWebSocket): void {
+function subscribe(guildId: string, connection: Connection): void {
   let set = connections.get(guildId)
   if (!set) {
     set = new Set()
     connections.set(guildId, set)
   }
-  set.add(ws)
+  set.add(connection)
 }
 
 function unsubscribe(guildId: string, ws: ServerWebSocket): void {
   const set = connections.get(guildId)
   if (!set) return
-  set.delete(ws)
+  for (const connection of set) {
+    if (connection.ws === ws) {
+      set.delete(connection)
+      break
+    }
+  }
+  if (set.size === 0) connections.delete(guildId)
+}
+
+function dispatchFrames(guildId: string, build: (version: FrameVersion) => WsMessage[]): void {
+  const set = connections.get(guildId)
+  if (!set || set.size === 0) return
+  const payloads = new Map<FrameVersion, string[]>()
+  for (const connection of set) {
+    if (connection.ws.readyState !== WebSocket.OPEN) {
+      set.delete(connection)
+      continue
+    }
+    let serialized = payloads.get(connection.version)
+    if (!serialized) {
+      serialized = build(connection.version).map((message) => JSON.stringify(message))
+      payloads.set(connection.version, serialized)
+    }
+    try {
+      for (const payload of serialized) connection.ws.send(payload)
+    } catch {
+      set.delete(connection)
+    }
+  }
   if (set.size === 0) connections.delete(guildId)
 }
 
 function broadcast(guildId: string, message: WsMessage): void {
+  dispatchFrames(guildId, () => [message])
+}
+
+function sendToVersion(guildId: string, version: FrameVersion, message: WsMessage): void {
+  dispatchFrames(guildId, (connectionVersion) => (connectionVersion === version ? [message] : []))
+}
+
+function hasConnections(guildId: string): boolean {
+  return (connections.get(guildId)?.size ?? 0) > 0
+}
+
+function sendState(guildId: string, snapshot: PlayerSnapshot | null): void {
+  dispatchFrames(guildId, (version) => buildStateFrames(snapshot, version))
+}
+
+export function publishState(guildId: string, snapshot?: PlayerSnapshot | null): void {
+  if (!hasConnections(guildId)) return
+  sendState(guildId, snapshot === undefined ? musicManager.getSnapshot(guildId) : snapshot)
+}
+
+const pendingGuilds = new Set<string>()
+let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushState(): void {
+  flushTimer = null
+  const guilds = [...pendingGuilds]
+  pendingGuilds.clear()
+  for (const guildId of guilds) {
+    if (hasConnections(guildId)) sendState(guildId, musicManager.getSnapshot(guildId))
+  }
+}
+
+export function scheduleState(guildId: string): void {
+  if (!hasConnections(guildId)) return
+  pendingGuilds.add(guildId)
+  flushTimer ??= setTimeout(flushState, 0)
+}
+
+async function broadcastHistory(guildId: string, added: QueueItemDto): Promise<void> {
   const set = connections.get(guildId)
   if (!set || set.size === 0) return
-  const payload = JSON.stringify(message)
-  for (const ws of set) {
-    if (ws.readyState !== WebSocket.OPEN) {
-      set.delete(ws)
-      continue
-    }
-    try {
-      ws.send(payload)
-    } catch {
-      set.delete(ws)
-    }
+
+  const versions = new Set<FrameVersion>()
+  for (const connection of set) versions.add(connection.version)
+
+  if (versions.has(1)) {
+    const items = await musicHistory.list(guildId)
+    sendToVersion(guildId, 1, { type: 'history', data: items })
   }
-  if (set.size === 0) connections.delete(guildId)
-}
-
-function stateFrames(guildId: string): WsMessage[] {
-  const snapshot = musicManager.getSnapshot(guildId)
-  const frames: WsMessage[] = [
-    {
-      type: 'playlist',
-      data: {
-        currentlyPlaying: snapshot?.current ?? null,
-        queueList: snapshot?.queue ?? [],
-        position: snapshot?.position ?? 0,
-        timestamp: new Date().toISOString(),
-      },
-    },
-  ]
-  if (snapshot) {
-    frames.push({ type: 'status', data: snapshot.status })
-    frames.push({ type: 'volume', data: snapshot.volume })
-    frames.push({ type: 'filters', data: snapshot.filters })
+  if (versions.has(2)) {
+    sendToVersion(guildId, 2, { type: 'history:add', data: added })
   }
-  return frames
-}
-
-export function broadcastState(guildId: string): void {
-  for (const frame of stateFrames(guildId)) broadcast(guildId, frame)
-}
-
-async function broadcastHistory(guildId: string): Promise<void> {
-  broadcast(guildId, { type: 'history', data: await musicHistory.list(guildId) })
 }
 
 export function broadcastAlert(guildId: string, message: string): void {
@@ -104,6 +129,8 @@ export const upgradeMusicWs = upgradeWebSocket(async (c) => {
   if (!guildId || !token) {
     throw new HTTPException(400, { message: 'guild_id and token query params are required' })
   }
+
+  const version: FrameVersion = c.req.query('v') === '2' ? 2 : 1
 
   let payload: SupabaseJwtPayload
   try {
@@ -119,8 +146,10 @@ export const upgradeMusicWs = upgradeWebSocket(async (c) => {
   return {
     onOpen(_event, ws) {
       const raw = ws.raw as ServerWebSocket
-      subscribe(guildId, raw)
-      for (const frame of stateFrames(guildId)) raw.send(JSON.stringify(frame))
+      subscribe(guildId, { ws: raw, version })
+      for (const message of buildStateFrames(musicManager.getSnapshot(guildId), version)) {
+        raw.send(JSON.stringify(message))
+      }
       void musicHistory
         .list(guildId)
         .then((data) => {
@@ -144,9 +173,10 @@ export function initMusicEvents(): void {
   lavalink.on('trackStart', (player, track) => {
     if (track) {
       const mapped = toTrack(track)
+      const item = toQueueItem(mapped)
       void musicHistory
-        .record(player.guildId, toQueueItem(mapped))
-        .then(() => broadcastHistory(player.guildId))
+        .record(player.guildId, item)
+        .then(() => broadcastHistory(player.guildId, item))
         .catch((error: unknown) => {
           console.error('[history] failed to record/broadcast track:', error)
         })
@@ -160,12 +190,12 @@ export function initMusicEvents(): void {
       })
       voiceListenerTracker.onTrackStart(player.guildId, player.voiceChannelId ?? null)
     }
-    broadcastState(player.guildId)
+    scheduleState(player.guildId)
   })
   lavalink.on('trackEnd', (player, _track, payload) => {
     const listeners = voiceListenerTracker.endTrack(player.guildId)
     analyticsRecorder.recordEnd(player.guildId, payload.reason, listeners)
-    broadcastState(player.guildId)
+    scheduleState(player.guildId)
   })
   lavalink.on('trackError', (player, _track, payload) => {
     console.error(
@@ -174,12 +204,12 @@ export function initMusicEvents(): void {
     )
   })
   lavalink.on('queueEnd', (player) => {
-    broadcastState(player.guildId)
+    scheduleState(player.guildId)
   })
   lavalink.on('playerDestroy', (player) => {
     const listeners = voiceListenerTracker.endTrack(player.guildId)
     analyticsRecorder.recordEnd(player.guildId, 'stopped', listeners)
-    broadcastState(player.guildId)
+    scheduleState(player.guildId)
   })
 }
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { bassboostPresetValues, type FilterPatch } from '../../music/filters'
 import { musicManager } from '../../music/MusicManager'
-import { broadcastState } from '../ws/music'
+import { publishState } from '../ws/music'
 import type { AppEnv } from '../types'
 import { zValidator } from '../validator'
 
@@ -32,13 +32,13 @@ export const filters = new Hono<AppEnv>()
 
     const state = await musicManager.applyFilters(guildId, patch)
     if (!state) return c.json({ error: 'No active player.' }, 404)
-    broadcastState(guildId)
+    publishState(guildId)
     return c.json(state)
   })
   .delete('/', async (c) => {
     const guildId = c.get('guildId')
     const ok = await musicManager.clearFilters(guildId)
     if (!ok) return c.json({ error: 'No active player.' }, 404)
-    broadcastState(guildId)
+    publishState(guildId)
     return c.json({ ok: true })
   })

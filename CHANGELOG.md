@@ -1,3 +1,10 @@
+## [1.18.5](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.4...v1.18.5) (2026-09-24)
+
+
+### Performance Improvements
+
+* coalesce state broadcasts and cut postgres/redis round trips ([4101d9b](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/4101d9b08edf77690d9e093ef3db8954687b472a))
+
 ## [1.18.4](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.3...v1.18.4) (2026-09-24)
 
 

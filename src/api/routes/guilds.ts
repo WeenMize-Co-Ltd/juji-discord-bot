@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { musicManager } from '../../music/MusicManager'
 import { musicService } from '../../music/MusicService'
 import { toQueueItem } from '../../music/snapshot'
-import { broadcastState } from '../ws/music'
+import { publishState } from '../ws/music'
 import type { AppEnv, SupabaseJwtPayload } from '../types'
 import { zValidator } from '../validator'
 import { dj } from './dj'
@@ -63,6 +63,7 @@ function requesterName(payload: SupabaseJwtPayload, claimed?: string): string {
 }
 
 export const guilds = new Hono<AppEnv>()
+  .get('/:guildId/access', (c) => c.json({ ok: true }))
   .get('/:guildId/player', (c) =>
     c.json(musicManager.getSnapshot(c.get('guildId')) ?? EMPTY_SNAPSHOT),
   )
@@ -77,14 +78,15 @@ export const guilds = new Hono<AppEnv>()
       return c.json({ error: 'No active player.' }, 404)
     }
 
-    broadcastState(guildId)
-    return c.json(musicManager.getSnapshot(guildId))
+    const snapshot = musicManager.getSnapshot(guildId)
+    publishState(guildId, snapshot)
+    return c.json(snapshot)
   })
   .post('/:guildId/player/next', async (c) => {
     const guildId = c.get('guildId')
     const result = await musicService.skip(guildId)
     if (!result) return c.json({ error: 'Nothing is playing.' }, 409)
-    broadcastState(guildId)
+    publishState(guildId)
     return c.json({
       skipped: toQueueItem(result.skipped),
       next: result.next ? toQueueItem(result.next) : null,
@@ -94,7 +96,7 @@ export const guilds = new Hono<AppEnv>()
     const guildId = c.get('guildId')
     const result = await musicManager.jumpTo(guildId, c.req.valid('param').position)
     if (!result) return c.json({ error: 'No such queue item.' }, 404)
-    broadcastState(guildId)
+    publishState(guildId)
     return c.json({ skipped: toQueueItem(result.skipped), next: toQueueItem(result.next) })
   })
 
@@ -133,7 +135,7 @@ export const guilds = new Hono<AppEnv>()
         }
         return c.json({ error: "Live streams aren't supported." }, 422)
       }
-      broadcastState(guildId)
+      publishState(guildId)
       return c.json({ ok: true, position: result.position, track: toQueueItem(result.track) }, 201)
     } catch (err) {
       console.error('[api] failed to add track to queue:', err)
@@ -144,7 +146,7 @@ export const guilds = new Hono<AppEnv>()
     const guildId = c.get('guildId')
     const ok = await musicManager.removeAt(guildId, c.req.valid('param').position)
     if (!ok) return c.json({ error: 'No such queue item.' }, 404)
-    broadcastState(guildId)
+    publishState(guildId)
     return c.json({ ok: true })
   })
   .patch('/:guildId/queue/:position', positionParam, zValidator('json', MoveSchema), async (c) => {
@@ -155,7 +157,7 @@ export const guilds = new Hono<AppEnv>()
       c.req.valid('json').to,
     )
     if (!ok) return c.json({ error: 'No such queue item.' }, 404)
-    broadcastState(guildId)
+    publishState(guildId)
     return c.json({ ok: true })
   })
   .route('/:guildId/stats', stats)

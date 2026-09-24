@@ -1,21 +1,7 @@
-/**
- * Artwork URLs coming out of Lavalink are unreliable in two specific ways:
- *
- * 1. The youtube-source plugin often reports `maxresdefault.jpg`, which 404s for any
- *    video that was never uploaded with a max-resolution thumbnail.
- * 2. `artworkUrl` can be absent entirely, which previously became an empty string and
- *    rendered as a broken image in the web player.
- *
- * `hqdefault.jpg` exists for every YouTube video, so it is both the rewrite target and
- * the fallback we derive from the video id.
- */
-
-/** YouTube thumbnail sizes that are not guaranteed to exist. */
 const UNRELIABLE_SIZES = /\/(maxresdefault|sddefault|hq720)\.jpg/
 
 const YOUTUBE_THUMBNAIL_HOSTS = new Set(['i.ytimg.com', 'img.youtube.com'])
 
-/** A YouTube video id is exactly 11 URL-safe base64 characters. */
 const VIDEO_ID = /^[\w-]{11}$/
 
 function youtubeThumbnail(videoId: string): string {
@@ -29,13 +15,28 @@ export interface ArtworkSource {
   sourceName: string
 }
 
-/**
- * Best available artwork URL for a track, or `''` when nothing can be derived.
- *
- * Returning `''` rather than `null` keeps the wire format unchanged for the web
- * player, whose `QueueItem.thumbnail` is a non-optional string.
- */
-export function resolveArtwork({ id, thumbnail, sourceName }: ArtworkSource): string {
+const CACHE_MAX = 500
+const cache = new Map<string, string>()
+
+function cacheKey({ id, thumbnail, sourceName }: ArtworkSource): string {
+  return `${id}\u0000${thumbnail ?? ''}\u0000${sourceName}`
+}
+
+export function resolveArtwork(source: ArtworkSource): string {
+  const key = cacheKey(source)
+  const cached = cache.get(key)
+  if (cached !== undefined) return cached
+
+  const resolved = resolveArtworkUncached(source)
+  if (cache.size >= CACHE_MAX) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+  cache.set(key, resolved)
+  return resolved
+}
+
+function resolveArtworkUncached({ id, thumbnail, sourceName }: ArtworkSource): string {
   const isYouTube = sourceName.toLowerCase().includes('youtube')
 
   if (thumbnail) {

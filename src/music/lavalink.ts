@@ -1,6 +1,7 @@
 import { type Client, Events } from 'discord.js'
 import { LavalinkManager, type Track as LavalinkTrack, type UnresolvedTrack } from 'lavalink-client'
 import { lavalinkHost, lavalinkPassword, lavalinkPort, lavalinkSecure } from '../config'
+import { entryIdFor } from './entryId'
 import type { Track } from '../types/track'
 
 let discordClient: Client | null = null
@@ -56,6 +57,7 @@ export function toTrack(track: LavalinkTrack | UnresolvedTrack): Track {
   const { info } = track
   return {
     id: info.identifier ?? '',
+    entryId: entryIdFor(track),
     title: info.title,
     author: info.author ?? '',
     url: info.uri ?? '',

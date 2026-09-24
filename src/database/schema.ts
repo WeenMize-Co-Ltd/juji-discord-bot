@@ -47,15 +47,6 @@ export const playEvents = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     endedAt: timestamp('ended_at', { withTimezone: true }),
     endReason: text('end_reason').$type<EndReason>(),
-    /**
-     * Wall-clock seconds the track was open on the player — it counts paused time and
-     * time with nobody listening, so it is *not* listening time. Real per-user listening
-     * lives in `listen_events.listened_sec`.
-     *
-     * The column is still named `listened_sec` on disk; renaming it needs an interactive
-     * `drizzle-kit generate` to be recorded as a rename rather than a drop-and-recreate,
-     * so the correction is made here at the type level for now.
-     */
     playedSec: integer('listened_sec'),
   },
   (t) => [
@@ -63,6 +54,7 @@ export const playEvents = pgTable(
     index('play_events_track_started_idx').on(t.trackId, t.startedAt),
     index('play_events_user_started_idx').on(t.discordUserId, t.startedAt),
     index('play_events_guild_track_idx').on(t.guildId, t.trackId),
+    index('play_events_guild_source_started_idx').on(t.guildId, t.requestSource, t.startedAt),
   ],
 )
 
@@ -94,6 +86,11 @@ export const listenEvents = pgTable(
   (t) => [
     index('listen_events_user_idx').on(t.discordUserId),
     index('listen_events_play_event_idx').on(t.playEventId),
-    index('listen_events_guild_created_idx').on(t.guildId, t.createdAt),
+    index('listen_events_guild_created_user_idx').on(
+      t.guildId,
+      t.createdAt,
+      t.discordUserId,
+      t.listenedSec,
+    ),
   ],
 )

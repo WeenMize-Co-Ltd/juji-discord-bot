@@ -1,3 +1,10 @@
+## [1.18.4](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.3...v1.18.4) (2026-09-24)
+
+
+### Performance Improvements
+
+* fix websocket registry leak and harden hot paths ([2478ceb](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/2478ceb89c12fb9401a79d9667912c507487fa08))
+
 ## [1.18.3](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.2...v1.18.3) (2026-09-11)
 
 

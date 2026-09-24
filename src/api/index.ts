@@ -28,11 +28,10 @@ const app = new Hono<AppEnv>()
   .route('/api/me', me)
   .route('/api/guilds', guilds)
 
-/** Exported so the frontend can derive an end-to-end typed client via `hc<AppType>`. */
 export type AppType = typeof app
 
-export async function startApi(): Promise<void> {
-  await initJwks()
+export function startApi(): void {
+  void initJwks()
   initMusicEvents()
   Bun.serve({ port: apiPort, fetch: app.fetch, websocket })
   console.log(`API listening on port ${apiPort}`)

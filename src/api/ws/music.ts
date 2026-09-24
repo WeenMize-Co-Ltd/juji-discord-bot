@@ -1,6 +1,6 @@
+import type { ServerWebSocket } from 'bun'
 import { upgradeWebSocket, websocket } from 'hono/bun'
 import { HTTPException } from 'hono/http-exception'
-import type { WSContext } from 'hono/ws'
 import { analyticsRecorder } from '../../database'
 import { musicHistory } from '../../music/history'
 import { lavalink, toTrack } from '../../music/lavalink'
@@ -29,9 +29,9 @@ type WsMessage =
   | { type: 'history'; data: QueueItemDto[] }
   | { type: 'alert'; data: string }
 
-const connections = new Map<string, Set<WSContext>>()
+const connections = new Map<string, Set<ServerWebSocket>>()
 
-function subscribe(guildId: string, ws: WSContext): void {
+function subscribe(guildId: string, ws: ServerWebSocket): void {
   let set = connections.get(guildId)
   if (!set) {
     set = new Set()
@@ -40,7 +40,7 @@ function subscribe(guildId: string, ws: WSContext): void {
   set.add(ws)
 }
 
-function unsubscribe(guildId: string, ws: WSContext): void {
+function unsubscribe(guildId: string, ws: ServerWebSocket): void {
   const set = connections.get(guildId)
   if (!set) return
   set.delete(ws)
@@ -52,12 +52,17 @@ function broadcast(guildId: string, message: WsMessage): void {
   if (!set || set.size === 0) return
   const payload = JSON.stringify(message)
   for (const ws of set) {
+    if (ws.readyState !== WebSocket.OPEN) {
+      set.delete(ws)
+      continue
+    }
     try {
       ws.send(payload)
     } catch {
-      /* best-effort: ignore sends to a closed socket */
+      set.delete(ws)
     }
   }
+  if (set.size === 0) connections.delete(guildId)
 }
 
 function stateFrames(guildId: string): WsMessage[] {
@@ -107,36 +112,30 @@ export const upgradeMusicWs = upgradeWebSocket(async (c) => {
     throw new HTTPException(401, { message: 'invalid or expired token' })
   }
 
-  // A valid token alone is not authorization — the socket streams one guild's live
-  // state, so the caller must actually be in that guild.
   if (!(await canAccessGuild(guildId, payload.user_metadata?.provider_id))) {
     throw new HTTPException(403, { message: 'you do not have access to this guild' })
   }
 
   return {
     onOpen(_event, ws) {
-      subscribe(guildId, ws)
-      for (const frame of stateFrames(guildId)) ws.send(JSON.stringify(frame))
+      const raw = ws.raw as ServerWebSocket
+      subscribe(guildId, raw)
+      for (const frame of stateFrames(guildId)) raw.send(JSON.stringify(frame))
       void musicHistory
         .list(guildId)
         .then((data) => {
-          ws.send(JSON.stringify({ type: 'history', data }))
+          raw.send(JSON.stringify({ type: 'history', data }))
         })
         .catch(() => {
           /* best-effort: history is non-critical for the initial frame */
         })
     },
     onClose(_event, ws) {
-      unsubscribe(guildId, ws)
+      unsubscribe(guildId, ws.raw as ServerWebSocket)
     },
   }
 })
 
-/**
- * lavalink-client types `Track.requester` as an empty interface, so it carries no
- * usable shape. `requesterTransformer` passes our own object through untouched —
- * narrow it back here rather than asserting over a structurally-empty type.
- */
 function toRequester(value: unknown): Partial<Requester> {
   return typeof value === 'object' && value !== null ? value : {}
 }

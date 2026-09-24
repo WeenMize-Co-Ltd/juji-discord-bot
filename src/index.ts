@@ -4,6 +4,6 @@ import { databaseClient } from './database'
 import { initDj } from './dj'
 
 await databaseClient.connect()
-await startApi()
+startApi()
 initDj()
 await startBot()

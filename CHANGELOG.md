@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.5...v1.19.0) (2026-10-04)
+
+
+### Features
+
+* list bot guilds by id ([d87316d](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/d87316db47703b0a251c891476ed82585f8e533f))
+
 ## [1.18.5](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.4...v1.18.5) (2026-09-24)
 
 

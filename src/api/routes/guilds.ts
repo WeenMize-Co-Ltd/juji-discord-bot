@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { musicManager } from '../../music/MusicManager'
+import { getDiscordClient } from '../../music/lavalink'
 import { musicService } from '../../music/MusicService'
 import { toQueueItem } from '../../music/snapshot'
 import { publishState } from '../ws/music'
@@ -50,6 +51,13 @@ const PositionParamSchema = z.object({
   position: z.coerce.number().int().min(1, 'Invalid position.'),
 })
 
+const IdsQuerySchema = z.object({
+  ids: z
+    .string()
+    .transform((s) => s.split(',').filter(Boolean))
+    .pipe(z.array(z.string().regex(/^\d{17,20}$/, 'Invalid guild id.')).max(200)),
+})
+
 const positionParam = zValidator('param', PositionParamSchema)
 
 function requesterName(payload: SupabaseJwtPayload, claimed?: string): string {
@@ -63,6 +71,14 @@ function requesterName(payload: SupabaseJwtPayload, claimed?: string): string {
 }
 
 export const guilds = new Hono<AppEnv>()
+  .get('/', zValidator('query', IdsQuerySchema), (c) => {
+    const client = getDiscordClient()
+    const found = c.req.valid('query').ids.flatMap((id) => {
+      const g = client?.guilds.cache.get(id)
+      return g ? [{ id: g.id, name: g.name, icon: g.iconURL({ size: 64 }) }] : []
+    })
+    return c.json(found)
+  })
   .get('/:guildId/access', (c) => c.json({ ok: true }))
   .get('/:guildId/player', (c) =>
     c.json(musicManager.getSnapshot(c.get('guildId')) ?? EMPTY_SNAPSHOT),

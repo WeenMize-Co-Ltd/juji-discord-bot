@@ -1,3 +1,15 @@
+# [1.20.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.19.0...v1.20.0) (2026-10-05)
+
+
+### Bug Fixes
+
+* run format code ([1749828](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/17498288bf09cc1a3416e2ea1abbee63ec20104e))
+
+
+### Features
+
+* **queue:** transfer track ownership on reorder ([3cb724c](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/3cb724c6f03fb01bd2aeeab3d867a8d4dc2d3270))
+
 # [1.19.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.18.5...v1.19.0) (2026-10-04)
 
 

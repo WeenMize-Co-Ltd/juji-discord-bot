@@ -45,6 +45,7 @@ const AddTrackSchema = z.object({
 
 const MoveSchema = z.object({
   to: z.number().int().min(1, '"to" must be a positive queue position.'),
+  username: z.string().trim().min(1).optional(),
 })
 
 const PositionParamSchema = z.object({
@@ -167,10 +168,19 @@ export const guilds = new Hono<AppEnv>()
   })
   .patch('/:guildId/queue/:position', positionParam, zValidator('json', MoveSchema), async (c) => {
     const guildId = c.get('guildId')
+    const { to, username } = c.req.valid('json')
+    const payload = c.get('jwtPayload')
+
     const ok = await musicManager.move(
       guildId,
       c.req.valid('param').position,
-      c.req.valid('json').to,
+      to,
+      {
+        username: requesterName(payload, username),
+        discordUserId: payload.user_metadata?.provider_id,
+        avatarUrl: payload.user_metadata?.avatar_url,
+        requestSource: 'api',
+      },
     )
     if (!ok) return c.json({ error: 'No such queue item.' }, 404)
     publishState(guildId)

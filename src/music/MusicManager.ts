@@ -13,6 +13,7 @@ import {
 } from './filters'
 import { getDiscordClient, lavalink, toTrack } from './lavalink'
 import { type PlayerSnapshot, toQueueItem } from './snapshot'
+import type { Requester } from './MusicService'
 import type { Track } from '../types/track'
 
 /** What Lavalink's queue actually holds — resolved or not-yet-resolved tracks. */
@@ -111,7 +112,12 @@ export class MusicManager {
     return true
   }
 
-  async move(guildId: string, fromPos: number, toPos: number): Promise<boolean> {
+  async move(
+    guildId: string,
+    fromPos: number,
+    toPos: number,
+    requester?: Requester,
+  ): Promise<boolean> {
     const player = lavalink.getPlayer(guildId)
     if (!player) return false
     const from = fromPos - 1
@@ -123,9 +129,8 @@ export class MusicManager {
     const track = Array.isArray(removed) ? removed[0] : removed
     if (!track) return false
 
-    // Clamp against the length *after* removal — the array is one shorter now, so the
-    // last valid insertion index is `length`, not the pre-removal `length - 1`. Re-read
-    // it rather than reusing a cached value: `trackEnd` can advance the queue mid-await.
+    if (requester) track.requester = requester
+
     const to = Math.max(0, Math.min(toPos - 1, player.queue.tracks.length))
     await player.queue.splice(to, 0, track)
     return true

@@ -171,17 +171,12 @@ export const guilds = new Hono<AppEnv>()
     const { to, username } = c.req.valid('json')
     const payload = c.get('jwtPayload')
 
-    const ok = await musicManager.move(
-      guildId,
-      c.req.valid('param').position,
-      to,
-      {
-        username: requesterName(payload, username),
-        discordUserId: payload.user_metadata?.provider_id,
-        avatarUrl: payload.user_metadata?.avatar_url,
-        requestSource: 'api',
-      },
-    )
+    const ok = await musicManager.move(guildId, c.req.valid('param').position, to, {
+      username: requesterName(payload, username),
+      discordUserId: payload.user_metadata?.provider_id,
+      avatarUrl: payload.user_metadata?.avatar_url,
+      requestSource: 'api',
+    })
     if (!ok) return c.json({ error: 'No such queue item.' }, 404)
     publishState(guildId)
     return c.json({ ok: true })

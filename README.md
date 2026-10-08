@@ -48,7 +48,10 @@ Under Docker Compose it's **internal to the Compose network** (not published to 
    ```sh
    DISCORD_TOKEN=your-bot-token
    DISCORD_CLIENT_ID=your-application-client-id
-   SUPABASE_URL=https://your-project-ref.supabase.co
+   DISCORD_CLIENT_SECRET=your-application-client-secret
+   # Better Auth (the bot hosts the login API; the web panel proxies it).
+   BETTER_AUTH_URL=https://panel.example.com   # public origin of the web panel
+   BETTER_AUTH_SECRET=generate-a-long-random-secret
 
    # Optional (HTTP API):
    # API_PORT=3000                          # port the Hono server listens on (default: 3000)
@@ -74,7 +77,9 @@ Under Docker Compose it's **internal to the Compose network** (not published to 
 
    ```
 
-   `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, and `SUPABASE_URL` are required and validated at startup. The `LAVALINK_*` vars are optional and default to the bundled Compose `lavalink` service.
+   `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `BETTER_AUTH_URL` and `BETTER_AUTH_SECRET` are required and validated at startup. The `LAVALINK_*` vars are optional and default to the bundled Compose `lavalink` service.
+
+   Register `${BETTER_AUTH_URL}/api/auth/callback/discord` as an OAuth2 redirect URI in the [Discord Developer Portal](https://discord.com/developers/applications) (the application behind `DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET`) so the web panel's login can complete.
 
 3. Register the slash commands with Discord:
 
@@ -115,10 +120,15 @@ The repo ships a multi-stage [Dockerfile](Dockerfile) (based on Bun's official i
    ```sh
    DISCORD_TOKEN=your-bot-token
    DISCORD_CLIENT_ID=your-application-client-id
-   SUPABASE_URL=https://your-project-ref.supabase.co
+   DISCORD_CLIENT_SECRET=your-application-client-secret
+   # Better Auth (the bot hosts the login API; the web panel proxies it).
+   BETTER_AUTH_URL=https://panel.example.com   # public origin of the web panel
+   BETTER_AUTH_SECRET=generate-a-long-random-secret
    LAVALINK_PASSWORD=youshallnotpass        # shared by the bot and the lavalink service
    YOUTUBE_OAUTH_REFRESH_TOKEN=             # Lavalink-only: burner-account OAuth token; see "YouTube playback" below
    ```
+
+   The Discord application must list `${BETTER_AUTH_URL}/api/auth/callback/discord` as an OAuth2 redirect URI (the web panel origin, not the bot's address).
 
 3. Build and start the stack in the background:
 

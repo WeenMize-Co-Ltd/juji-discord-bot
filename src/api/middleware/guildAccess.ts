@@ -115,7 +115,7 @@ export const guildAccess = createMiddleware<AppEnv>(async (c, next) => {
   const guildId = c.req.param('guildId')
   if (!guildId) return c.json({ error: 'A guild id is required.' }, 400)
 
-  const discordUserId = c.get('jwtPayload').user_metadata?.provider_id
+  const discordUserId = c.get('jwtPayload').discord_id
   if (!discordUserId) {
     return c.json({ error: 'This account is not linked to Discord.' }, 403)
   }

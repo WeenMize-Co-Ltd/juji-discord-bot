@@ -11,7 +11,8 @@ architecture changes.
   exactly this order; PRs to `main` run only this quality gate.
 - There is no test runner or test script — do not invent one.
 - `bun run start` starts the bot and API in one process. Bun auto-loads `.env`; required vars are
-  `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `SUPABASE_URL` (validated by `requireEnv`, which throws).
+  `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `BETTER_AUTH_URL`,
+  `BETTER_AUTH_SECRET` (validated by `requireEnv`, which throws).
 - `bun run deploy` re-registers slash commands with Discord. Required after changing any command's
   `data` (name/description/options).
 - Local music needs a Lavalink node: `docker compose up -d lavalink`. Compose uses the external

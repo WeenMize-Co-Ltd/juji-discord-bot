@@ -1,5 +1,7 @@
 import { boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 
+export * from './auth-schema'
+
 export const requestSourceValues = ['slash', 'api', 'auto-dj'] as const
 export type RequestSource = (typeof requestSourceValues)[number]
 

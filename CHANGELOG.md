@@ -1,3 +1,16 @@
+# [1.21.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.20.0...v1.21.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **config:** normalize BETTER_AUTH_URL to a bare origin ([fa917b8](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/fa917b8fd3d4d3681488ba8bb2342054becbdbb7))
+
+
+### Features
+
+* **api:** add GET /api/me/guilds for post-login guild sync ([ea7dd4b](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/ea7dd4b1c9b5fdd1a1a22837a5d9602e9526fc5a))
+* **database:** add Better Auth tables and migration ([e7aa86f](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/e7aa86fe6fe97286b29b49e1b5ebb64e3c96c115))
+
 # [1.20.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.19.0...v1.20.0) (2026-10-05)
 
 

@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { auth } from '../auth'
 import { apiPort, corsOrigins } from '../config'
 import { authMiddleware, initJwks } from './middleware/auth'
 import { guildAccess } from './middleware/guildAccess'
@@ -23,6 +24,9 @@ const app = new Hono<AppEnv>()
   .use('*', cors({ origin: corsOrigins }))
   .route('/health', health)
   .get('/ws', upgradeMusicWs)
+  // Better Auth must be registered before the JWT middleware: the web BFF
+  // proxies every /api/auth/* endpoint here with the browser's cookies.
+  .all('/api/auth/*', (c) => auth.handler(c.req.raw))
   .use('/api/*', authMiddleware)
   .use('/api/guilds/:guildId/*', guildAccess)
   .route('/api/me', me)

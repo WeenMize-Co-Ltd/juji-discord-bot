@@ -8,9 +8,9 @@ import { musicManager } from '../../music/MusicManager'
 import type { Requester } from '../../music/MusicService'
 import { type PlayerSnapshot, type QueueItemDto, toQueueItem } from '../../music/snapshot'
 import { voiceListenerTracker } from '../../music/VoiceListenerTracker'
-import { verifySupabaseJwt } from '../middleware/auth'
+import { verifyAuthJwt } from '../middleware/auth'
 import { canAccessGuild } from '../middleware/guildAccess'
-import type { SupabaseJwtPayload } from '../types'
+import type { AuthJwtPayload } from '../types'
 import { buildStateFrames, type FrameVersion, type WsMessage } from './frames'
 
 interface Connection {
@@ -132,14 +132,14 @@ export const upgradeMusicWs = upgradeWebSocket(async (c) => {
 
   const version: FrameVersion = c.req.query('v') === '2' ? 2 : 1
 
-  let payload: SupabaseJwtPayload
+  let payload: AuthJwtPayload
   try {
-    payload = await verifySupabaseJwt(token)
+    payload = await verifyAuthJwt(token)
   } catch {
     throw new HTTPException(401, { message: 'invalid or expired token' })
   }
 
-  if (!(await canAccessGuild(guildId, payload.user_metadata?.provider_id))) {
+  if (!(await canAccessGuild(guildId, payload.discord_id))) {
     throw new HTTPException(403, { message: 'you do not have access to this guild' })
   }
 

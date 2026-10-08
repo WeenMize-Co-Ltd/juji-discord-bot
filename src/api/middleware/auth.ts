@@ -1,24 +1,16 @@
 import type { Context, Next } from 'hono'
 import { Jwt } from 'hono/utils/jwt'
-import { z } from 'zod'
-import { supabaseUrl } from '../../config'
-import { type SupabaseJwtPayload, SupabaseJwtPayloadSchema } from '../types'
+import { auth } from '../../auth'
+import { authAudience, authIssuer } from '../../config'
+import { type AuthJwtPayload, AuthJwtPayloadSchema } from '../types'
 
 type AllowedAlgorithm = 'ES256' | 'RS256'
 
 const JWKS_TTL_MS = 10 * 60_000
-const JWKS_MIN_REFETCH_MS = 30_000
-const JWKS_FETCH_TIMEOUT_MS = 3_000
-const JWKS_FAILURE_BACKOFF_MS = 30_000
 
 type JwksKey = NonNullable<Parameters<typeof Jwt.verifyWithJwks>[1]['keys']>[number]
 
 type ImportableJwk = JwksKey & { alg?: string }
-
-const JwksSchema = z.object({ keys: z.array(z.custom<JwksKey>()) })
-
-const issuer = `${supabaseUrl.replace(/\/+$/, '')}/auth/v1`
-const jwksUri = `${issuer}/.well-known/jwks.json`
 
 interface CachedKey {
   kid: string | undefined
@@ -43,62 +35,51 @@ async function importJwk(jwk: ImportableJwk): Promise<CachedKey> {
   return { kid: jwk.kid, alg, key }
 }
 
-class SupabaseJwks {
+/**
+ * Better Auth runs in this same process, so JWKS keys are read straight from
+ * the auth instance instead of being fetched over the network.
+ */
+class AuthJwks {
   private keys: CachedKey[] = []
   private fetchedAtMs = 0
-  private failedAtMs = 0
   private inflight: Promise<CachedKey[]> | null = null
 
   async get(): Promise<CachedKey[]> {
     if (this.keys.length > 0 && Date.now() - this.fetchedAtMs < JWKS_TTL_MS) return this.keys
-    if (Date.now() - this.failedAtMs < JWKS_FAILURE_BACKOFF_MS) {
-      if (this.keys.length > 0) return this.keys
-      throw new Error('Supabase JWKS unavailable (recent fetch failed)')
-    }
     return this.refresh()
   }
 
   refresh(): Promise<CachedKey[]> {
-    this.inflight ??= this.fetch()
-      .catch((error: unknown) => {
-        this.failedAtMs = Date.now()
-        throw error
-      })
-      .finally(() => {
-        this.inflight = null
-      })
+    this.inflight ??= this.fetch().finally(() => {
+      this.inflight = null
+    })
     return this.inflight
   }
 
-  async refreshIfStale(): Promise<CachedKey[]> {
-    if (Date.now() - this.fetchedAtMs < JWKS_MIN_REFETCH_MS) return this.keys
-    return this.refresh()
-  }
-
   private async fetch(): Promise<CachedKey[]> {
-    const res = await fetch(jwksUri, { signal: AbortSignal.timeout(JWKS_FETCH_TIMEOUT_MS) })
-    if (!res.ok) throw new Error(`Failed to fetch Supabase JWKS: ${res.status}`)
-    const { keys } = JwksSchema.parse(await res.json())
-    if (keys.length === 0) throw new Error('Supabase JWKS response contained no keys')
-    const imported = await Promise.all(keys.map(importJwk))
+    const { keys } = await auth.api.getJwks()
+    if (keys.length === 0) throw new Error('Better Auth JWKS contained no keys')
+    const imported = await Promise.all(
+      keys.map((key) => importJwk(key as unknown as ImportableJwk)),
+    )
     this.keys = imported
     this.fetchedAtMs = Date.now()
     return imported
   }
 }
 
-const jwks = new SupabaseJwks()
+const jwks = new AuthJwks()
 
 export async function initJwks(): Promise<void> {
   try {
     await jwks.refresh()
-    console.log('[auth] Supabase JWKS loaded')
+    console.log('[auth] Better Auth JWKS loaded')
   } catch (error) {
-    console.warn('[auth] could not preload Supabase JWKS; will retry on first request:', error)
+    console.warn('[auth] could not preload Better Auth JWKS; will retry on first request:', error)
   }
 }
 
-export async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPayload> {
+export async function verifyAuthJwt(token: string): Promise<AuthJwtPayload> {
   const { header } = Jwt.decode(token)
   const alg = toAllowedAlgorithm(header.alg)
   if (!alg) throw new Error(`Unsupported token algorithm: ${header.alg}`)
@@ -106,7 +87,8 @@ export async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPaylo
   let keys = await jwks.get()
   let match = keys.find((key) => key.kid === header.kid)
   if (!match) {
-    keys = await jwks.refreshIfStale()
+    // Unknown kid — the auth instance may have rotated its key pair.
+    keys = await jwks.refresh()
     match = keys.find((key) => key.kid === header.kid)
   }
   if (!match) throw new Error('No JWKS key matches the token kid')
@@ -114,10 +96,10 @@ export async function verifySupabaseJwt(token: string): Promise<SupabaseJwtPaylo
 
   const payload = await Jwt.verify(token, match.key, {
     alg,
-    iss: issuer,
-    aud: 'authenticated',
+    iss: authIssuer,
+    aud: authAudience,
   })
-  return SupabaseJwtPayloadSchema.parse(payload)
+  return AuthJwtPayloadSchema.parse(payload)
 }
 
 export const authMiddleware = async (c: Context, next: Next): Promise<Response | undefined> => {
@@ -126,7 +108,7 @@ export const authMiddleware = async (c: Context, next: Next): Promise<Response |
     return c.json({ error: 'Missing or invalid Authorization header' }, 401)
   }
   try {
-    const payload = await verifySupabaseJwt(authHeader.slice(7))
+    const payload = await verifyAuthJwt(authHeader.slice(7))
     c.set('jwtPayload', payload)
     await next()
   } catch {

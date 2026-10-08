@@ -5,7 +5,7 @@ import { getDiscordClient } from '../../music/lavalink'
 import { musicService } from '../../music/MusicService'
 import { toQueueItem } from '../../music/snapshot'
 import { publishState } from '../ws/music'
-import type { AppEnv, SupabaseJwtPayload } from '../types'
+import type { AppEnv, AuthJwtPayload } from '../types'
 import { zValidator } from '../validator'
 import { dj } from './dj'
 import { filters } from './filters'
@@ -61,14 +61,9 @@ const IdsQuerySchema = z.object({
 
 const positionParam = zValidator('param', PositionParamSchema)
 
-function requesterName(payload: SupabaseJwtPayload, claimed?: string): string {
+function requesterName(payload: AuthJwtPayload, claimed?: string): string {
   if (claimed) return claimed
-  return (
-    payload.user_metadata?.custom_claims?.global_name ??
-    payload.user_metadata?.full_name ??
-    payload.email ??
-    'unknown'
-  )
+  return payload.name ?? payload.email ?? 'unknown'
 }
 
 export const guilds = new Hono<AppEnv>()
@@ -126,7 +121,7 @@ export const guilds = new Hono<AppEnv>()
     const { url, username } = c.req.valid('json')
 
     const payload = c.get('jwtPayload')
-    const discordUserId = payload.user_metadata?.provider_id
+    const discordUserId = payload.discord_id
 
     try {
       const result = await musicService.addOrSummon(
@@ -135,7 +130,7 @@ export const guilds = new Hono<AppEnv>()
         {
           username: requesterName(payload, username),
           discordUserId,
-          avatarUrl: payload.user_metadata?.avatar_url,
+          avatarUrl: payload.image,
           requestSource: 'api',
         },
         discordUserId,
@@ -173,8 +168,8 @@ export const guilds = new Hono<AppEnv>()
 
     const ok = await musicManager.move(guildId, c.req.valid('param').position, to, {
       username: requesterName(payload, username),
-      discordUserId: payload.user_metadata?.provider_id,
-      avatarUrl: payload.user_metadata?.avatar_url,
+      discordUserId: payload.discord_id,
+      avatarUrl: payload.image,
       requestSource: 'api',
     })
     if (!ok) return c.json({ error: 'No such queue item.' }, 404)

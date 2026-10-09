@@ -74,6 +74,7 @@ Under Docker Compose it's **internal to the Compose network** (not published to 
    # DATABASE_URL=postgres://juji:juji@postgres:5432/juji  # Postgres URL (default: the compose service); analytics disabled if unreachable
    # POSTGRES_USER=juji                     # Postgres user for the compose service (default: juji)
    # POSTGRES_PASSWORD=juji                 # Postgres password for the compose service (default: juji)
+   # ADDED_TRACKS_MAX=10                    # max persisted "Added songs" entries per user per guild (default: 10)
 
    ```
 

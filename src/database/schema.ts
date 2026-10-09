@@ -1,4 +1,13 @@
-import { boolean, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 
 export * from './auth-schema'
 
@@ -57,6 +66,25 @@ export const playEvents = pgTable(
     index('play_events_user_started_idx').on(t.discordUserId, t.startedAt),
     index('play_events_guild_track_idx').on(t.guildId, t.trackId),
     index('play_events_guild_source_started_idx').on(t.guildId, t.requestSource, t.startedAt),
+  ],
+)
+
+export const addedTracks = pgTable(
+  'added_tracks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    guildId: text('guild_id').notNull(),
+    discordUserId: text('discord_user_id')
+      .notNull()
+      .references(() => users.id),
+    trackId: text('track_id')
+      .notNull()
+      .references(() => tracks.id),
+    addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('added_tracks_user_track_idx').on(t.guildId, t.discordUserId, t.trackId),
+    index('added_tracks_user_added_idx').on(t.guildId, t.discordUserId, t.addedAt),
   ],
 )
 

@@ -1,5 +1,6 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Player } from 'lavalink-client'
+import { addedTracksRecorder } from '../database/AddedTracks'
 import { MusicManager, musicManager } from './MusicManager'
 import { toTrack } from './lavalink'
 import type { RequestSource } from '../database/schema'
@@ -8,10 +9,8 @@ import type { Track } from '../types/track'
 export interface Requester {
   username: string
   discordUserId?: string
-  /** Discord CDN avatar of whoever asked for the track; surfaced on the leaderboards. */
   avatarUrl?: string
   requestSource: RequestSource
-  /** Original search string; injected by `enqueue()` — call sites need not set it. */
   query?: string
 }
 
@@ -87,9 +86,18 @@ export class MusicService {
     await player.queue.add(first)
     if (startedNow) await player.play()
 
-    // 1-based position within the *upcoming* queue, matching `removeAt`/`move`/`jumpTo`,
-    // which all index `queue.tracks` as `position - 1`. A track that starts immediately
-    // becomes `queue.current` rather than entering that list, so it reports 0.
+    if (requester?.discordUserId && requester.requestSource !== 'auto-dj') {
+      addedTracksRecorder.record(
+        player.guildId,
+        {
+          id: requester.discordUserId,
+          displayName: requester.username,
+          avatarUrl: requester.avatarUrl,
+        },
+        track,
+      )
+    }
+
     const position = startedNow ? 0 : player.queue.tracks.length
     return { ok: true, track, startedNow, position }
   }

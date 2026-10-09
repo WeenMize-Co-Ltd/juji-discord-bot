@@ -14,6 +14,14 @@ export const lavalink = new LavalinkManager({
       port: lavalinkPort,
       authorization: lavalinkPassword,
       secure: lavalinkSecure,
+      // The library's default closeOnError path calls socket.close(500) — an invalid
+      // WebSocket close code, which throws inside the error handler and kills the
+      // process. Reconnecting directly is what that path is trying to achieve anyway.
+      closeOnError: false,
+      // Outlive long Lavalink outages. With the default 5 attempts the node destroys
+      // itself after ~50s and nothing ever reconnects it.
+      retryAmount: Number.POSITIVE_INFINITY,
+      retryDelay: 5000,
     },
   ],
   sendToShard: (guildId, payload) => {

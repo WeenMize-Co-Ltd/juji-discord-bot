@@ -29,13 +29,13 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
-    # TV is the only OAuth-capable client — put it first so authenticated playback is
-    # attempted before the unauthenticated clients (MUSIC has no playback, so it's used
-    # for search only and is skipped for playback). Some videos still fail on TV/WEB, so
-    # also register the clients that hand out pre-signed URLs (ANDROID_MUSIC, IOS, MWEB),
-    # which bypass the signature-cipher path entirely.
+    # No OAuth: Google disables burner accounts used for the device flow, so playback
+    # relies on the unauthenticated clients. ANDROID_VR/ANDROID_MUSIC/IOS/MWEB hand out
+    # pre-signed URLs (bypassing the signature-cipher path), MUSIC handles searches only,
+    # and WEB/WEBEMBEDDED are the fallback. TV is omitted: its playback always requires
+    # sign-in, so without OAuth it can only fail. If YouTube starts demanding a login
+    # again, add a poToken for WEB/WEBEMBEDDED instead (see README).
     clients:
-      - TV
       - ANDROID_VR
       - ANDROID_MUSIC
       - IOS
@@ -43,23 +43,13 @@ plugins:
       - MUSIC
       - WEB
       - WEBEMBEDDED
-    # On a datacenter/VPS IP, YouTube demands a logged-in session ("This video requires
-    # login"). OAuth with a BURNER Google account is the fix; a poToken alone is not
-    # enough. Set YOUTUBE_OAUTH_REFRESH_TOKEN in .env after completing the device login
-    # (see README). When the token is absent, the OAuth flow is triggered on boot and the
-    # refresh token is printed to the logs.
-    oauth:
-      enabled: true
-      refreshToken: '${YOUTUBE_OAUTH_REFRESH_TOKEN:}'
     # Delegates signature/player-script parsing to a remote cipher server, avoiding
     # "Must find sig function from script" breakage when YouTube rotates its player.
     remoteCipher:
       url: 'https://cipher.kikkia.dev/'
       userAgent: 'juji-discord-bot'
 
-# Surfaces the OAuth device-login code and the resulting refresh token in the logs.
 logging:
   level:
     root: INFO
     lavalink: INFO
-    dev.lavalink.youtube.http.YoutubeOauth2Handler: INFO

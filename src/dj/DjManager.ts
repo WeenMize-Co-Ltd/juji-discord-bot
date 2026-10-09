@@ -111,6 +111,19 @@ class DjManager {
     this.sessions.delete(guildId)
   }
 
+  /** A node loss takes its players with it; drop the sessions so the next connect relaunches them. */
+  async onNodeDisconnect(): Promise<void> {
+    const guildIds = [...this.sessions.keys()]
+    this.sessions.clear()
+    for (const guildId of guildIds) {
+      try {
+        await musicManager.stop(guildId)
+      } catch (error) {
+        console.error('[dj] failed to stop player of disconnected node:', error)
+      }
+    }
+  }
+
   onTrackStart(player: Player): void {
     if (!this.sessions.has(player.guildId)) return
     void this.topUp(player.guildId)
@@ -127,7 +140,19 @@ class DjManager {
 
   private async maybeStart(guildId: string): Promise<void> {
     const config = this.configs.get(guildId)
-    if (!config?.enabled || this.sessions.has(guildId)) return
+    if (!config?.enabled) return
+
+    const existing = this.sessions.get(guildId)
+    if (existing) {
+      // A tracked session is only live while its player sits on a connected node.
+      const player = musicManager.getPlayer(guildId)
+      if (player?.node.connected) return
+      this.sessions.delete(guildId)
+    }
+
+    // `createPlayer` throws when no node is connected (e.g. Lavalink is still booting);
+    // `initDj` re-runs `onReady` on every node connect, so just wait for that.
+    if (lavalink.nodeManager.leastUsedNodes().length === 0) return
 
     const session: DjSession = {
       channelId: config.voiceChannelId,
@@ -269,5 +294,13 @@ export function initDj(): void {
   })
   lavalink.on('playerDestroy', (player) => {
     djManager.clearSession(player.guildId)
+  })
+  // `ready` fires before the node handshake finishes, so any session that lost the race
+  // is retried whenever the node (re)connects.
+  lavalink.nodeManager.on('connect', () => {
+    void djManager.onReady()
+  })
+  lavalink.nodeManager.on('disconnect', () => {
+    void djManager.onNodeDisconnect()
   })
 }

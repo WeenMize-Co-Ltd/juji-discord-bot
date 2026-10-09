@@ -44,7 +44,6 @@ services:
     environment:
       - _JAVA_OPTIONS=-Xmx384m
       - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
-      - YOUTUBE_OAUTH_REFRESH_TOKEN=${YOUTUBE_OAUTH_REFRESH_TOKEN:-}
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
     networks:

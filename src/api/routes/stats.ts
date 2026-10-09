@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
+import { createMiddleware } from 'hono/factory'
 import { z } from 'zod'
+import { featureFlags } from '../../features/FeatureFlags'
 import { analyticsQueries, type StatsRange, statsRangeValues } from '../../database'
 import type { AppEnv } from '../types'
 import { zValidator } from '../validator'
@@ -16,7 +18,21 @@ const StatsQuerySchema = z.object({
 
 const query = zValidator('query', StatsQuerySchema)
 
+/**
+ * The listening stats board is a per-guild feature flag; when it is off the
+ * endpoints are unreachable even outside the web panel, so the flag cannot be
+ * bypassed by calling the API directly.
+ */
+const requireStatsBoard = createMiddleware<AppEnv>(async (c, next) => {
+  if (!(await featureFlags.isEnabled(c.get('guildId'), 'stats_board'))) {
+    return c.json({ error: 'feature_disabled' }, 403)
+  }
+  await next()
+  return undefined
+})
+
 export const stats = new Hono<AppEnv>()
+  .use(requireStatsBoard)
   .get('/summary', query, async (c) =>
     c.json(await analyticsQueries.summary(c.get('guildId'), c.req.valid('query').range)),
   )

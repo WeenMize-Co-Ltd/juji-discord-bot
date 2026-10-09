@@ -1,3 +1,12 @@
+# [1.22.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.21.0...v1.22.0) (2026-10-09)
+
+
+### Features
+
+* **api:** add GET /guilds/:guildId/added endpoint ([cbbbaf4](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/cbbbaf420b80bc2bec4f69701072e147aca00314))
+* **database:** add added_tracks table and ADDED_TRACKS_MAX config ([d527b99](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/d527b994172eab262ac10d29019ed9c638d542e1))
+* **music:** persist user-added tracks with count-based retention ([1482d93](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/1482d93e2f0666ddbd8c451c2067f894b9c73012))
+
 # [1.21.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.20.0...v1.21.0) (2026-10-08)
 
 

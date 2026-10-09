@@ -1,7 +1,8 @@
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { databaseClient, db } from './client'
-import { listenEvents, playEvents, tracks, users } from './schema'
+import { listenEvents, playEvents } from './schema'
 import type { EndReason, RequestSource } from './schema'
+import { upsertTrack, upsertUsers } from './upserts'
 import { resolveArtwork } from '../music/artwork'
 import type { Track } from '../types/track'
 
@@ -67,9 +68,9 @@ class AnalyticsRecorder {
     }
 
     await Promise.all([
-      this.upsertTrack(track.id, trackValues),
+      upsertTrack(track.id, trackValues),
       ctx.discordUserId
-        ? this.upsertUsers([
+        ? upsertUsers([
             { id: ctx.discordUserId, displayName: ctx.displayName, avatarUrl: ctx.avatarUrl },
           ])
         : Promise.resolve(),
@@ -106,7 +107,7 @@ class AnalyticsRecorder {
         .set({ endedAt: new Date(), endReason, playedSec })
         .where(eq(playEvents.id, openEvent.eventId)),
       valid.length > 0
-        ? this.upsertUsers(
+        ? upsertUsers(
             valid.map((listener) => ({
               id: listener.discordUserId,
               displayName: listener.displayName,
@@ -146,50 +147,6 @@ class AnalyticsRecorder {
     for (const [guildId, event] of this.open) {
       if (event.startedAtMs < cutoff) this.open.delete(guildId)
     }
-  }
-
-  private upsertTrack(
-    id: string,
-    values: {
-      title: string
-      author: string
-      url: string
-      thumbnail: string | null
-      durationSec: number
-      sourceName: string
-    },
-  ): Promise<unknown> {
-    return db
-      .insert(tracks)
-      .values({ id, ...values })
-      .onConflictDoUpdate({
-        target: tracks.id,
-        set: { ...values, updatedAt: new Date() },
-        setWhere: sql`${tracks.title} is distinct from excluded.title
-          or ${tracks.author} is distinct from excluded.author
-          or ${tracks.url} is distinct from excluded.url
-          or ${tracks.thumbnail} is distinct from excluded.thumbnail
-          or ${tracks.durationSec} is distinct from excluded.duration_sec
-          or ${tracks.sourceName} is distinct from excluded.source_name`,
-      })
-  }
-
-  private upsertUsers(
-    rows: { id: string; displayName: string; avatarUrl?: string }[],
-  ): Promise<unknown> {
-    return db
-      .insert(users)
-      .values(rows.map((row) => ({ ...row, avatarUrl: row.avatarUrl ?? null })))
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          displayName: sql`excluded.display_name`,
-          avatarUrl: sql`coalesce(excluded.avatar_url, ${users.avatarUrl})`,
-          updatedAt: new Date(),
-        },
-        setWhere: sql`${users.displayName} is distinct from excluded.display_name
-          or ${users.avatarUrl} is distinct from coalesce(excluded.avatar_url, ${users.avatarUrl})`,
-      })
   }
 }
 

@@ -9,6 +9,7 @@ import { publishState } from '../ws/music'
 import type { AppEnv, AuthJwtPayload } from '../types'
 import { zValidator } from '../validator'
 import { dj } from './dj'
+import { features } from './features'
 import { filters } from './filters'
 import { stats } from './stats'
 
@@ -185,4 +186,5 @@ export const guilds = new Hono<AppEnv>()
   })
   .route('/:guildId/stats', stats)
   .route('/:guildId/dj', dj)
+  .route('/:guildId/features', features)
   .route('/:guildId/filters', filters)

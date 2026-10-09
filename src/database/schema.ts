@@ -3,6 +3,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -98,6 +99,25 @@ export const guildDjConfigs = pgTable('guild_dj_configs', {
     .defaultNow()
     .$onUpdate(() => new Date()),
 })
+
+/** Per-guild feature toggles. A missing row means the feature's default applies. */
+export const featureKeys = ['stats_board'] as const
+export type FeatureKey = (typeof featureKeys)[number]
+
+export const guildFeatureFlags = pgTable(
+  'guild_feature_flags',
+  {
+    guildId: text('guild_id').notNull(),
+    feature: text('feature').$type<FeatureKey>().notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [primaryKey({ columns: [t.guildId, t.feature] })],
+)
 
 export const listenEvents = pgTable(
   'listen_events',

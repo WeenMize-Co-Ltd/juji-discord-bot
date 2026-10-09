@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { addedTracksRecorder } from '../../database'
 import { musicManager } from '../../music/MusicManager'
 import { getDiscordClient } from '../../music/lavalink'
 import { musicService } from '../../music/MusicService'
@@ -153,6 +154,12 @@ export const guilds = new Hono<AppEnv>()
       console.error('[api] failed to add track to queue:', err)
       return c.json({ error: 'Internal server error' }, 500)
     }
+  })
+  .get('/:guildId/added', async (c) => {
+    const discordUserId = c.get('jwtPayload').discord_id
+    if (!discordUserId) return c.json({ error: 'Not authenticated.' }, 401)
+    const items = await addedTracksRecorder.list(c.get('guildId'), discordUserId)
+    return c.json({ items })
   })
   .delete('/:guildId/queue/:position', positionParam, async (c) => {
     const guildId = c.get('guildId')

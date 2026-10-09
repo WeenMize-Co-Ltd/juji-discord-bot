@@ -1,3 +1,11 @@
+## [1.22.1](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.22.0...v1.22.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **lavalink:** run YouTube without OAuth ([97a0691](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/97a06914fc982138c2eb6903553ced4ca3e91d12))
+* **music:** survive Lavalink downtime without crashing ([a76553d](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/a76553d82bb3c31921ac53b6f622a0262d3aea94))
+
 # [1.22.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.21.0...v1.22.0) (2026-10-09)
 
 

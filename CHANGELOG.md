@@ -1,3 +1,10 @@
+# [1.23.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.22.1...v1.23.0) (2026-10-09)
+
+
+### Features
+
+* **features:** add per-guild feature flags and gate stats API ([454ea04](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/454ea048fd47237ec64d346caf0a0bee95cd1318))
+
 ## [1.22.1](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.22.0...v1.22.1) (2026-10-09)
 
 

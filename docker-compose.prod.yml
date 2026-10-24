@@ -11,6 +11,19 @@ services:
         condition: service_started
     env_file:
       - .env
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - >-
+          const response = await fetch('http://127.0.0.1:' + (process.env.API_PORT || '3000') + '/ready',
+          { signal: AbortSignal.timeout(4000) }).catch(() => null);
+          process.exit(response?.ok ? 0 : 1)
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
     pull_policy: always
     networks:
       - juji-network

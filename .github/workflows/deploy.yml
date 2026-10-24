@@ -280,7 +280,7 @@ jobs:
   notify:
     permissions: {}
     needs: [release, build-and-push, deploy]
-    if: needs.release.outputs.published == 'true'
+    if: needs.release.outputs.published == 'true' && needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -293,7 +293,7 @@ jobs:
           REPO: ${{ github.repository }}
           ACTOR: ${{ github.actor }}
         run: |
-          truncated_notes=$(echo "$NOTES" | head -c 1000)
+          truncated_notes="${NOTES:0:1000}"
           payload=$(jq -n \
             --arg title "Juji v${VERSION} deployed" \
             --arg url "https://github.com/${REPO}/releases/tag/v${VERSION}" \
@@ -317,6 +317,6 @@ jobs:
                 timestamp: (now | todate)
               }]
             }')
-          curl -fsSL -X POST "$DISCORD_WEBHOOK_URL" \
+          curl -fsSL --connect-timeout 15 --max-time 60 -X POST "$DISCORD_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "$payload"

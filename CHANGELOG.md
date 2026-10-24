@@ -1,3 +1,12 @@
+## [1.23.1](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.23.0...v1.23.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **ci:** pin workflow and container dependencies ([03c87bd](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/03c87bd43537306673ddacad46af9dedc46cd5a0))
+* **deploy:** require Discord readiness before reporting success ([5d4a3ad](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/5d4a3adde2b99719d670f14d9eeb9c85ecda85dd))
+* **deploy:** secure credentials and deploy immutable images ([bffce92](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/bffce928b5fc0e6aafb84d86802089d6c2542e8f))
+
 # [1.23.0](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.22.1...v1.23.0) (2026-10-09)
 
 

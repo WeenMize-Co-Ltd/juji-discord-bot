@@ -8,6 +8,7 @@ import { guildAccess } from './middleware/guildAccess'
 import { guilds } from './routes/guilds'
 import { health } from './routes/health'
 import { me } from './routes/me'
+import { ready } from './routes/ready'
 import type { AppEnv } from './types'
 import { initMusicEvents, upgradeMusicWs, websocket } from './ws/music'
 
@@ -23,6 +24,7 @@ const app = new Hono<AppEnv>()
   .use(logger(redactedLog))
   .use('*', cors({ origin: corsOrigins }))
   .route('/health', health)
+  .route('/ready', ready)
   .get('/ws', upgradeMusicWs)
   // Better Auth must be registered before the JWT middleware: the web BFF
   // proxies every /api/auth/* endpoint here with the browser's cookies.

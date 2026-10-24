@@ -11,12 +11,25 @@ services:
         condition: service_started
     env_file:
       - .env
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - >-
+          const response = await fetch('http://127.0.0.1:' + (process.env.API_PORT || '3000') + '/ready',
+          { signal: AbortSignal.timeout(4000) }).catch(() => null);
+          process.exit(response?.ok ? 0 : 1)
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
     pull_policy: always
     networks:
       - juji-network
 
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
     restart: unless-stopped
     environment:
       POSTGRES_DB: juji
@@ -34,14 +47,14 @@ services:
       - juji-network
 
   redis:
-    image: redis:8-alpine
+    image: redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0
     restart: unless-stopped
     pull_policy: always
     networks:
       - juji-network
 
   lavalink:
-    image: ghcr.io/lavalink-devs/lavalink:4-alpine
+    image: ghcr.io/lavalink-devs/lavalink:4-alpine@sha256:96be2be7ee50d35a9bd42c8c7b99e2a4b741f09123066c1ebb9e014dd7db204d
     restart: unless-stopped
     pull_policy: always
     environment:

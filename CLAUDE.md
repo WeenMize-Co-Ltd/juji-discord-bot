@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This project runs on **Bun** (not Node). It uses Bun-specific APIs (`Bun.Glob`, `Bun.env`, `import.meta.dir`), so commands must be run with `bun`.
 
+CI and the Docker base image use Bun **1.4.2**; update their pins together. The existing Node 24/npm-based semantic-release action is an explicit release-tooling exception. Application and application dependency commands remain Bun-only.
+
 - `bun run start` — start the bot (`src/index.ts`)
 - `bun run deploy` — register slash commands with Discord's API (`src/deploy-commands.ts`); run this whenever a command's `data` definition changes
 - `bun run lint` — ESLint over `src/`
@@ -15,7 +17,9 @@ There is no test setup. Lint config uses typescript-eslint `strict` + `stylistic
 
 Required env vars (read via `requireEnv`, which throws if missing): `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `BETTER_AUTH_URL` (public origin of the web panel), `BETTER_AUTH_SECRET`. The HTTP API adds optional `API_PORT` (default 3000) and `API_CORS_ORIGINS` (default: **none** — no browser origin is allowed unless set; use `*` to allow any). Music adds optional `LAVALINK_HOST` (default `lavalink`), `LAVALINK_PORT` (default 2333), `LAVALINK_PASSWORD` (default `youshallnotpass`), `LAVALINK_SECURE` (default `false`). Lavalink's youtube-source plugin runs without OAuth — Google disables the burner accounts the device flow needs — and relies on the unauthenticated clients configured in `application.yml`; a `poToken` is the documented fallback if YouTube starts demanding sign-in. The recently-played history adds optional `REDIS_URL` (default `redis://redis:6379`), `HISTORY_TTL_SECONDS` (default 86400), `HISTORY_MAX` (default 50). The stats/leaderboard endpoints add optional `STATS_CACHE_TTL_SECONDS` (default 60), the Redis cache TTL for analytics queries. Playback analytics adds optional `DATABASE_URL` (default `postgres://juji:juji@postgres:5432/juji`, the Compose service) plus `POSTGRES_USER`/`POSTGRES_PASSWORD` (both default `juji`) used by the `postgres` Compose service; if the DB is unreachable the bot still runs with analytics disabled. The web panel's "Added songs" list adds optional `ADDED_TRACKS_MAX` (default 10), the per-user per-guild retention cap.
 
-> **When adding a new env var:** update the `.env` example in [README.md](README.md), the required-env list above, and the deploy workflow's `.env` write step in [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
+> **When adding a new runtime env var:** update the `.env` example in [README.md](README.md), the env list above, the allowlist in [.github/scripts/write-deploy-env.ts](.github/scripts/write-deploy-env.ts), the configuration-generation step in [.github/workflows/deploy.yml](.github/workflows/deploy.yml), and the GitHub Environment secret when required.
+
+Production also receives `IMAGE`, an immutable GHCR digest generated from the build output and serialized into the server `.env`; it is not a manually maintained secret. Workflow-only transport secrets are `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`, **`SSH_KNOWN_HOSTS`** (the verified server key under alias `deploy-target`), `CF_ACCESS_CLIENT_ID`, and `CF_ACCESS_CLIENT_SECRET`. These and application secrets belong to the `production` GitHub Environment, restricted to branch `main` with no required reviewers. `DISCORD_WEBHOOK_URL` remains a repository secret for notifications; `GITHUB_TOKEN` is automatic.
 
 ## Releases & Versioning
 
@@ -23,8 +27,14 @@ Versioning is fully automated by **semantic-release** (config in [.releaserc.jso
 
 - Commit messages decide the bump: `fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE:` → major. `chore:`/`docs:`/`refactor:` etc. trigger no release.
 - On every push to `main`, the `release` job in [.github/workflows/deploy.yml](.github/workflows/deploy.yml) computes the next version, then: updates `package.json` + `CHANGELOG.md`, commits them back as `chore(release): X.Y.Z [skip ci]`, creates the `vX.Y.Z` git tag, and publishes a GitHub Release.
-- Only when a release is actually published do the `build-and-push` and `deploy` jobs run. The GHCR image is tagged with the exact version plus rolling `X.Y`, `X`, and `latest` (e.g. `1.4.2`, `1.4`, `1`, `latest`). The server is deployed to the pinned `X.Y.Z` tag.
+- Only when a release is actually published do the `build-and-push` and `deploy` jobs run. Both check out the release commit SHA. The GHCR image keeps exact-version and rolling `X.Y`, `X`, and `latest` tags, but the server deploys the build output's immutable `ghcr.io/…@sha256:…` reference.
 - Net effect: merges that contain only non-release commits build/deploy nothing; a release tag, a GHCR image, and a server deploy all share one synchronized version.
+
+Deployment scripts live in [.github/scripts/](.github/scripts/). `write-deploy-env.ts` reads an explicit runtime allowlist, rejects missing required values/NUL bytes/mutable image references, and escapes both dotenv and Compose interpolation without embedding secrets in shell source. Empty optional values are omitted to preserve defaults. `deploy.sh` executes from a disposable server staging directory, validates and pulls before replacing active files, uses the stable `juji-discord-bot` Compose project name, and removes temporary Docker credentials on exit. Configuration files use mode `600`; directories and recovery backups are private. `.previous` retains the preceding configuration; `.deployment-pending` preserves it across failed retries until readiness succeeds. Host-wide image pruning is excluded.
+
+The production healthcheck runs a Bun fetch against unauthenticated `GET /ready` using `API_PORT` (default 3000). It returns `200 { status: 'ready' }` only while the domain-exposed Discord client reports `isReady()`, otherwise `503 { status: 'not_ready' }`. `/health` remains a liveness endpoint. The API imports `getDiscordClient()` from the music domain, never the Discord adapter. Readiness does not require optional analytics/cache availability. Compose waits up to 300 seconds before success notification; failures emit container status and bounded application logs and require manual recovery because migrations may already have run. See README for environment provisioning, verified host-key rotation, failed-job reruns, and database-aware recovery.
+
+Actions and Docker/Compose images are pinned to commits/digests and maintained through weekly Dependabot PRs. Semantic-release and extra plugins use exact versions; their transitive packages still require review. cloudflared is pinned to a release and checked against a committed SHA-256 before execution. Token permissions are read-only by default, with scoped release/build/deploy overrides; only release persists checkout credentials for its Git push.
 
 ## Architecture
 

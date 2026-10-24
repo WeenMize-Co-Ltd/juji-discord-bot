@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
   # Keyed by ref so pull requests check in parallel while main stays serialized.
   group: release-${{ github.ref }}
@@ -18,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -50,6 +55,7 @@ jobs:
       published: ${{ steps.semantic.outputs.new_release_published }}
       version: ${{ steps.semantic.outputs.new_release_version }}
       notes: ${{ steps.semantic.outputs.new_release_notes }}
+      commit: ${{ steps.semantic.outputs.new_release_git_head }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -82,12 +88,13 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image: ${{ steps.meta.outputs.image }}
+      image: ${{ steps.digest.outputs.image }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: v${{ needs.release.outputs.version }}
+          ref: ${{ needs.release.outputs.commit }}
+          persist-credentials: false
 
       - name: Log in to GHCR
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
@@ -98,12 +105,15 @@ jobs:
 
       - name: Compute image tags
         id: meta
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
         run: |
           name="ghcr.io/${GITHUB_REPOSITORY,,}"
-          v="${{ needs.release.outputs.version }}"
+          v="$VERSION"
+          [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           minor="${v%.*}"
           major="${v%%.*}"
-          echo "image=${name}:${v}" >> "$GITHUB_OUTPUT"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
           {
             echo "tags<<TAGS"
             echo "${name}:${v}"
@@ -117,6 +127,7 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
@@ -125,24 +136,39 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Export immutable image reference
+        id: digest
+        env:
+          IMAGE_NAME: ${{ steps.meta.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "image=${IMAGE_NAME}@${IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
+
   deploy:
     needs: [release, build-and-push]
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+      packages: read
     env:
-      IMAGE: ${{ needs.build-and-push.outputs.image }}
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-      TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      DEPLOY_ID: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: v${{ needs.release.outputs.version }}
+          ref: ${{ needs.release.outputs.commit }}
+          persist-credentials: false
 
-      - name: Install cloudflared
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.4.2'
+
+      - name: Install verified cloudflared
         run: |
           cloudflared_path="${RUNNER_TEMP}/cloudflared"
           curl --fail --silent --show-error --location --retry 3 \
@@ -154,61 +180,105 @@ jobs:
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
           "$cloudflared_path" --version
 
-      - name: Configure SSH
+      - name: Prepare private configuration
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          API_PORT: ${{ secrets.API_PORT }}
+          API_CORS_ORIGINS: ${{ secrets.API_CORS_ORIGINS }}
+          LAVALINK_PASSWORD: ${{ secrets.LAVALINK_PASSWORD }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/juji-deploy"
+          chmod 700 "$RUNNER_TEMP/juji-deploy"
+          bun --no-env-file .github/scripts/write-deploy-env.ts "$RUNNER_TEMP/juji-deploy/.env"
+          cp docker-compose.prod.yml "$RUNNER_TEMP/juji-deploy/docker-compose.yml"
+          cp application.yml .github/scripts/deploy.sh "$RUNNER_TEMP/juji-deploy/"
+
+      - name: Configure verified SSH
+        id: ssh
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+          umask 077
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh-keygen -F deploy-target -f ~/.ssh/known_hosts > /dev/null
           cat > ~/.ssh/config <<EOF
           Host deploy-target
             HostName ${SSH_HOST}
+            HostKeyAlias deploy-target
             User ${SSH_USER}
             IdentityFile ~/.ssh/id_deploy
             IdentitiesOnly yes
-            ProxyCommand cloudflared access ssh --hostname %h
-            StrictHostKeyChecking accept-new
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ProxyCommand "${RUNNER_TEMP}/cloudflared" access ssh --hostname %h
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 15
+            ServerAliveCountMax 3
           EOF
-          chmod 600 ~/.ssh/config
+          chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts ~/.ssh/config
 
-      - name: Copy compose file to server
+      - name: Stage configuration and deploy
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ github.actor }}
         run: |
-          ssh deploy-target 'mkdir -p ~/juji-discord-bot'
-          IMAGE="${IMAGE}" envsubst '${IMAGE}' < docker-compose.prod.yml \
-            | ssh deploy-target 'cat > ~/juji-discord-bot/docker-compose.yml'
-          # Lavalink mounts this; ship it alongside the compose file.
-          ssh deploy-target 'cat > ~/juji-discord-bot/application.yml' < application.yml
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          [[ "$DEPLOY_ID" =~ ^[0-9]+-[0-9]+$ ]]
+          [[ "$GHCR_USER" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_-]*(\[bot\])?$ ]]
+          # Validated identifiers intentionally expand on the runner before SSH.
+          # shellcheck disable=SC2029
+          ssh deploy-target "umask 077; mkdir -p ~/juji-discord-bot; chmod 700 ~/juji-discord-bot; mkdir ~/juji-discord-bot/.deploy-${DEPLOY_ID}"
+          # shellcheck disable=SC2029
+          tar -C "$RUNNER_TEMP/juji-deploy" -cf - .env docker-compose.yml application.yml deploy.sh \
+            | ssh deploy-target "tar -xf - -C ~/juji-discord-bot/.deploy-${DEPLOY_ID}"
+          # shellcheck disable=SC2029
+          printf '%s\n' "$GHCR_TOKEN" \
+            | ssh deploy-target "bash ~/juji-discord-bot/.deploy-${DEPLOY_ID}/deploy.sh '$GHCR_USER'"
 
-      - name: Write server .env from GitHub secrets
+      - name: Clean remote staging directory
+        if: always() && steps.ssh.outcome == 'success'
+        continue-on-error: true
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
-          ssh deploy-target 'umask 077; cat > ~/juji-discord-bot/.env' <<EOF
-          DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
-          DISCORD_CLIENT_ID=${{ secrets.DISCORD_CLIENT_ID }}
-          DISCORD_CLIENT_SECRET=${{ secrets.DISCORD_CLIENT_SECRET }}
-          BETTER_AUTH_URL=${{ secrets.BETTER_AUTH_URL }}
-          BETTER_AUTH_SECRET=${{ secrets.BETTER_AUTH_SECRET }}
-          API_PORT=${{ secrets.API_PORT }}
-          API_CORS_ORIGINS=${{ secrets.API_CORS_ORIGINS }}
-          LAVALINK_PASSWORD=${{ secrets.LAVALINK_PASSWORD }}
-          REDIS_URL=${{ secrets.REDIS_URL }}
-          DATABASE_URL=${{ secrets.DATABASE_URL }}
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          EOF
+          [[ "$DEPLOY_ID" =~ ^[0-9]+-[0-9]+$ ]]
+          # DEPLOY_ID is validated and intentionally expanded on the runner.
+          # shellcheck disable=SC2029
+          ssh deploy-target "rm -rf -- ~/juji-discord-bot/.deploy-${DEPLOY_ID}"
 
-      - name: Deploy
+      - name: Clean runner credentials
+        if: always()
         run: |
-          ssh deploy-target bash -s <<EOF
-          set -euo pipefail
-          cd ~/juji-discord-bot
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker compose pull
-          docker compose up -d
-          docker image prune -f
-          docker logout ghcr.io
-          EOF
+          rm -rf -- "$RUNNER_TEMP/juji-deploy"
+          rm -f -- ~/.ssh/id_deploy ~/.ssh/config ~/.ssh/known_hosts
 
   notify:
+    permissions: {}
     needs: [release, build-and-push, deploy]
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest

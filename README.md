@@ -178,9 +178,11 @@ Configure the following **before merging deployment changes into `main`**:
    ```
 
    Store the complete `deploy-target ssh-ed25519 ...` line in `SSH_KNOWN_HOSTS`. The workflow uses `deploy-target` as its host-key alias and refuses untrusted or changed keys. When rotating a host key, verify its replacement through the trusted console before updating this secret.
+
+   If SSH setup exits immediately and the Actions log shows `SSH_KNOWN_HOSTS:` with an empty value, the required secret is missing, empty, or unavailable to the job. Add it at **Settings → Environments → production → Environment secrets → Add secret**, using the complete public-key line above, then rerun the failed jobs. A SHA256 fingerprint alone is not a known-hosts entry.
 4. Provision the dedicated SSH deployment account with Docker access, Docker Compose v2.24 or newer, and the external `juji-network`. Scope the Cloudflare service token to the SSH Access application. Ensure the production directory is `~/juji-discord-bot` and the Compose project name is `juji-discord-bot` so existing containers and database volumes are reused.
 
-The workflow validates required values before transfer, serializes `.env` through a Bun helper, and stages configuration privately on the server. Compose validation and image pulls complete before active files are replaced by renames. Directories use mode `700`; configuration and secret files use `600`. Temporary registry credentials are removed on exit, including failure and handled termination signals. The workflow never runs host-wide image pruning.
+The workflow validates required values before transfer, serializes `.env` through a Bun helper, and stages configuration privately on the server. Compose validation and image pulls complete before active files are replaced by renames. Directories use mode `700`; `.env`, Compose configuration, and recovery backups use `600`. Active `application.yml` uses `644` so Lavalink's container user can read its bind mount; runtime credentials come from the environment. Lavalink is recreated on deployment to mount the newly replaced file, briefly interrupting music connections. Temporary registry credentials are removed on exit, including failure and handled termination signals. The workflow never runs host-wide image pruning.
 
 Production waits up to 300 seconds for Compose readiness. The bot healthcheck uses Bun to query `/ready` every 10 seconds, with a 5-second timeout, 60-second startup grace period, and three retries. Success notifications include the exact image digest and run only after deployment succeeds. A failed deployment reports container status and the last 50 application log lines. Keep credentials out of application logs; never print `.env`, Docker auth files, or resolved Compose configuration when debugging.
 
@@ -200,13 +202,26 @@ umask 077
 cp .previous/docker-compose.yml docker-compose.yml
 cp .previous/application.yml application.yml
 cp .previous/.env .env
-chmod 600 docker-compose.yml application.yml .env
+chmod 600 docker-compose.yml .env
+chmod 644 application.yml
+docker compose --project-name juji-discord-bot up -d --no-deps --force-recreate --pull never lavalink
 if docker compose --project-name juji-discord-bot up --wait --wait-timeout 300 --pull never; then
   rm -f .deployment-pending
 fi
 ```
 
 `--pull never` uses the retained image locally. If an image is missing, authenticate to GHCR with package-read credentials in a temporary `DOCKER_CONFIG` directory, pull it, and remove that directory afterward. Revert schema changes only through an explicitly reviewed database recovery procedure. Keep the pending marker until recovery passes readiness. Retain needed image digests and prune unused images separately after confirming recovery requirements.
+
+If Lavalink logs `application.yml (Permission denied)`, repair the mounted file's permissions and recreate Lavalink on the server:
+
+```sh
+cd ~/juji-discord-bot
+chmod 644 application.yml
+docker compose --project-name juji-discord-bot up -d --no-deps --force-recreate --pull never lavalink
+docker compose --project-name juji-discord-bot logs --tail 50 lavalink
+```
+
+Keep `.env` private. Recreating Lavalink also refreshes a bind mount that still points at an older file after an atomic deployment rename. The bot retries its Lavalink connection automatically.
 
 ### YouTube playback
 

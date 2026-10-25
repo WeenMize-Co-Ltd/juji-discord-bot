@@ -29,7 +29,10 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 chmod 700 "$deploy_root" "$stage_dir" "$DOCKER_CONFIG"
-chmod 600 "$stage_dir/.env" "$stage_dir/docker-compose.yml" "$stage_dir/application.yml"
+chmod 600 "$stage_dir/.env" "$stage_dir/docker-compose.yml"
+# Lavalink runs as a different UID and must read this bind-mounted configuration.
+# Runtime credentials stay in .env/environment; the host directory stays private.
+chmod 644 "$stage_dir/application.yml"
 
 # Validation and pulls finish before the active configuration is replaced. Quiet
 # validation avoids printing resolved credentials. A stable project name prevents
@@ -63,5 +66,8 @@ done
 compose=(docker compose --project-name juji-discord-bot --project-directory "$deploy_root"
   --env-file "$deploy_root/.env" -f "$deploy_root/docker-compose.yml")
 activated=true
+# Atomic file replacement changes the bind mount's inode. Recreate Lavalink so it
+# mounts the new application.yml even when its image and environment are unchanged.
+"${compose[@]}" up -d --no-deps --force-recreate --pull never lavalink
 "${compose[@]}" up --wait --wait-timeout 300
 rm -f -- "$pending"

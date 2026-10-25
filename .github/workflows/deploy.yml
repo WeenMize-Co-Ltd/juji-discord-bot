@@ -211,16 +211,29 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
-          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
-          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
-          test -n "$SSH_PRIVATE_KEY"
-          test -n "$SSH_KNOWN_HOSTS"
+          for name in SSH_HOST SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing required secret ${name}. Set it under Settings > Environments > production > Environment secrets."
+              exit 1
+            fi
+          done
+          if [[ ! "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]; then
+            echo '::error::SSH_HOST must be a hostname without a scheme, path, port, or whitespace.'
+            exit 1
+          fi
+          if [[ ! "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]; then
+            echo '::error::SSH_USER must be a Unix account name without whitespace.'
+            exit 1
+          fi
           umask 077
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh-keygen -F deploy-target -f ~/.ssh/known_hosts > /dev/null
+          if ! ssh-keygen -F deploy-target -f ~/.ssh/known_hosts > /dev/null; then
+            echo '::error::SSH_KNOWN_HOSTS must contain the verified server public host key under alias deploy-target. See README: Automated production deployment.'
+            exit 1
+          fi
           cat > ~/.ssh/config <<EOF
           Host deploy-target
             HostName ${SSH_HOST}

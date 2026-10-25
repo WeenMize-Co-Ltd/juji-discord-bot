@@ -1,3 +1,10 @@
+## [1.23.2](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.23.1...v1.23.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* **deploy:** allow Lavalink to read its mounted configuration ([d27eae1](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/commit/d27eae1e239c1a0c56b9e84b01fe1c35ea0ef76f))
+
 ## [1.23.1](https://github.com/WeenMize-Co-Ltd/juji-discord-bot/compare/v1.23.0...v1.23.1) (2026-10-24)
 
 

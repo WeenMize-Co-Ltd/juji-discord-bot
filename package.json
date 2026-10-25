@@ -1,6 +1,6 @@
 {
   "name": "juji-discord-bot",
-  "version": "1.23.1",
+  "version": "1.23.2",
   "module": "index.ts",
   "dependencies": {
     "better-auth": "^1.7.7",
